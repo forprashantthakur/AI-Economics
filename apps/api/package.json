@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/server.ts --pglite-dir=.pgdata",
     "start": "node dist/server.js",
-    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.js --packages=external --alias:@aies/engine=../../packages/engine/src/index.ts --alias:@aies/reports=../../packages/reports/src/index.ts",
+    "build": "npm run build:server && npm run build:cli",
+    "build:server": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.js --packages=external --alias:@aies/engine=../../packages/engine/src/index.ts --alias:@aies/reports=../../packages/reports/src/index.ts --sourcemap",
+    "build:cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js --packages=external --alias:@aies/engine=../../packages/engine/src/index.ts --alias:@aies/reports=../../packages/reports/src/index.ts --sourcemap",
+    "migrate": "tsx src/cli.ts migrate --pglite-dir=.pgdata",
+    "seed": "tsx src/cli.ts seed --pglite-dir=.pgdata",
+    "create-user": "tsx src/cli.ts create-user --pglite-dir=.pgdata",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },

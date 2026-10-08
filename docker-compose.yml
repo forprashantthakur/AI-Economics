@@ -1,0 +1,69 @@
+# Enterprise AI Economics & Commercialization Studio — local / single-host deployment.
+#
+#   export POSTGRES_PASSWORD=… JWT_SECRET=…   # or put them in a .env file next to this file
+#   docker compose up -d --build
+#   open http://localhost:8081            (web; /api is proxied to the API)
+#
+# Required: POSTGRES_PASSWORD and JWT_SECRET (>= 32 random chars, e.g. `openssl rand -base64 48`).
+# Optional: SEED_PASSWORD (demo users <role>@demo.local are created on first start), CORS_ORIGIN, API_PORT.
+
+name: aies
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aies
+      POSTGRES_USER: aies
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aies -d aies"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: aies-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      # Credentials come from PGPASSWORD so special characters need no URL-encoding.
+      DATABASE_URL: postgres://aies@db:5432/aies
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (at least 32 random characters)}
+      JWT_TTL: ${JWT_TTL:-8h}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      TRUST_PROXY: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Not published by default: the web container proxies /api. Uncomment for direct access.
+    # ports:
+    #   - "${API_PORT:-8080}:8080"
+    expose:
+      - "8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: aies-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8081}:80"
+
+volumes:
+  pgdata:
