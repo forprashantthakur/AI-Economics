@@ -1,0 +1,15 @@
+{
+  "name": "ai-economics-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise AI Economics & Commercialization Studio — AI project costing, ACU & ABU metering, commercial pricing, ROI & value realization",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "test": "npm run test -w @aies/engine && npm run test -w @aies/reports && npm run test -w @aies/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev -w @aies/web",
+    "dev:api": "npm run dev -w @aies/api",
+    "build": "npm run build -w @aies/web && npm run build -w @aies/api"
+  },
+  "engines": { "node": ">=20" }
+}
