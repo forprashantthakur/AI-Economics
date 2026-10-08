@@ -1,0 +1,302 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens — white, charcoal and ledger green.
+ * Colours are defined once as CSS variables and redefined for dark mode;
+ * Tailwind utilities (bg-paper, text-ink, border-line, bg-brand …) read them.
+ */
+:root {
+  color-scheme: light;
+  --canvas: #f3f5f4;
+  --paper: #ffffff;
+  --sunken: #f7f9f8;
+  --ink: #1e2422;
+  --ink-2: #4b5450;
+  --ink-3: #78827e;
+  --line: #dce2df;
+  --line-soft: #eaeeec;
+  --brand: #0b6e4f;
+  --brand-strong: #085a40;
+  --brand-tint: #e6f2ec;
+  --brand-ink: #ffffff;
+  --rail: #1e2422;
+  --rail-2: #29302d;
+  --rail-ink: #c4ccc8;
+  --rail-ink-strong: #ffffff;
+  --rail-accent: #41b88a;
+  --good: #0a7d36;
+  --good-tint: #e5f4ea;
+  --warn: #9a6200;
+  --warn-tint: #fdf3dc;
+  --bad: #b42d2d;
+  --bad-tint: #fbe9e9;
+  --focus: #0b6e4f;
+  /* chart tokens (validated categorical order; see dataviz reference palette) */
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --s5: #e87ba4;
+  --s6: #008300;
+  --s7: #4a3aa7;
+  --s8: #e34948;
+  --accent-series: #0b6e4f;
+  --accent-series-soft: #9fcfb9;
+  --grid: #e7ebe9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: #121715;
+    --paper: #1a201e;
+    --sunken: #161b19;
+    --ink: #edf1ef;
+    --ink-2: #b4beb9;
+    --ink-3: #87918d;
+    --line: #2f3734;
+    --line-soft: #252c29;
+    --brand: #3fb386;
+    --brand-strong: #5cc79c;
+    --brand-tint: #17332a;
+    --brand-ink: #0d1412;
+    --rail: #0d1110;
+    --rail-2: #1a201e;
+    --rail-ink: #a9b3ae;
+    --rail-ink-strong: #ffffff;
+    --rail-accent: #41b88a;
+    --good: #4cc77a;
+    --good-tint: #163022;
+    --warn: #f0b545;
+    --warn-tint: #33291a;
+    --bad: #ef7d7d;
+    --bad-tint: #3a1d1d;
+    --focus: #5cc79c;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --s5: #d55181;
+    --s6: #008300;
+    --s7: #9085e9;
+    --s8: #e66767;
+    --accent-series: #3fb386;
+    --accent-series-soft: #2c6b53;
+    --grid: #29312e;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #121715;
+  --paper: #1a201e;
+  --sunken: #161b19;
+  --ink: #edf1ef;
+  --ink-2: #b4beb9;
+  --ink-3: #87918d;
+  --line: #2f3734;
+  --line-soft: #252c29;
+  --brand: #3fb386;
+  --brand-strong: #5cc79c;
+  --brand-tint: #17332a;
+  --brand-ink: #0d1412;
+  --rail: #0d1110;
+  --rail-2: #1a201e;
+  --rail-ink: #a9b3ae;
+  --rail-ink-strong: #ffffff;
+  --rail-accent: #41b88a;
+  --good: #4cc77a;
+  --good-tint: #163022;
+  --warn: #f0b545;
+  --warn-tint: #33291a;
+  --bad: #ef7d7d;
+  --bad-tint: #3a1d1d;
+  --focus: #5cc79c;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --s6: #008300;
+  --s7: #9085e9;
+  --s8: #e66767;
+  --accent-series: #3fb386;
+  --accent-series-soft: #2c6b53;
+  --grid: #29312e;
+}
+
+@theme inline {
+  --font-sans: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --color-canvas: var(--canvas);
+  --color-paper: var(--paper);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-ink: var(--brand-ink);
+  --color-rail: var(--rail);
+  --color-rail-2: var(--rail-2);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-ink-strong: var(--rail-ink-strong);
+  --color-rail-accent: var(--rail-accent);
+  --color-good: var(--good);
+  --color-good-tint: var(--good-tint);
+  --color-warn: var(--warn);
+  --color-warn-tint: var(--warn-tint);
+  --color-bad: var(--bad);
+  --color-bad-tint: var(--bad-tint);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'kern';
+}
+
+/* Numbers align in tables and stat rows. */
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Inputs share one quiet style. */
+.field {
+  width: 100%;
+  min-width: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 14px;
+  line-height: 1.4;
+  transition: border-color 120ms;
+}
+.field:hover {
+  border-color: var(--ink-3);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.field[disabled],
+.field[readonly] {
+  background: var(--sunken);
+  color: var(--ink-2);
+}
+select.field {
+  appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378827e' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+
+/* Data tables: hairline rows, right-aligned numerals. */
+table.dtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+table.dtable th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  background: var(--paper);
+}
+table.dtable td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
+}
+table.dtable tr:last-child td {
+  border-bottom: none;
+}
+table.dtable td.r,
+table.dtable th.r {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+table.dtable tfoot td {
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  font-weight: 600;
+}
+table.dtable tbody tr:hover td {
+  background: var(--sunken);
+}
+table.dtable .field {
+  padding: 4px 7px;
+}
+
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Recharts: quiet axes and tooltips that follow the tokens. */
+.recharts-cartesian-axis-tick-value {
+  fill: var(--ink-3);
+  font-size: 12px;
+}
+.recharts-cartesian-grid line {
+  stroke: var(--grid);
+}
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+.recharts-legend-item-text {
+  color: var(--ink-2) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  aside,
+  header.topbar,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
