@@ -134,16 +134,16 @@ export function Projects() {
           <Empty title="No projects match" body="Clear the search or choose another status." action={<Button onClick={() => (setQuery(''), setStatus('all'))}>Clear filters</Button>} />
         ) : (
           <div className="scroll-x">
-            <table className="dtable min-w-[1120px]">
+            <table className="dtable min-w-[880px]">
               <thead>
                 <tr>
                   <th>Project</th>
-                  <th>Industry</th>
+                  <th className="hidden 2xl:table-cell">Industry</th>
                   <th>Status</th>
-                  <th>Currency</th>
+                  <th className="hidden 2xl:table-cell">Currency</th>
                   <th className="r">Volume / month</th>
                   <th>Go-live</th>
-                  <th>Updated</th>
+                  <th className="hidden 2xl:table-cell">Updated</th>
                   <th className="r">Run cost / month</th>
                   <th className="r">Contract value</th>
                   <th className="r">Client ROI</th>
@@ -156,7 +156,7 @@ export function Projects() {
                   const roi = n(r.economics.client.roiPct);
                   return (
                     <tr key={p.id} className={cx(current && '[&>td]:bg-brand-tint')}>
-                      <td className="min-w-[240px] max-w-[320px]">
+                      <td className="min-w-[220px] max-w-[300px]">
                         <a href={href('project', p.id, 'overview')} className="font-semibold text-ink hover:text-brand hover:underline underline-offset-2">
                           {p.name}
                         </a>
@@ -165,14 +165,14 @@ export function Projects() {
                           {p.client.clientName}
                         </div>
                       </td>
-                      <td className="text-[13px] text-ink-2 max-w-[150px]">{p.client.industry || '—'}</td>
+                      <td className="text-[13px] text-ink-2 max-w-[150px] hidden 2xl:table-cell">{p.client.industry || '—'}</td>
                       <td>
                         <Badge tone={STATUS_LABEL[p.status].tone}>{STATUS_LABEL[p.status].label}</Badge>
                       </td>
-                      <td className="text-[13px] text-ink-2">{p.currency}</td>
+                      <td className="text-[13px] text-ink-2 hidden 2xl:table-cell">{p.currency}</td>
                       <td className="r">{count(r.baseline.totals.attempted, p.currency)}</td>
                       <td className="text-[13px] num whitespace-nowrap">{periodLabel(p.goLiveDate)}</td>
-                      <td className="text-[13px] text-ink-2 num whitespace-nowrap">{shortDate(p.updatedAt)}</td>
+                      <td className="text-[13px] text-ink-2 num whitespace-nowrap hidden 2xl:table-cell">{shortDate(p.updatedAt)}</td>
                       <td className="r">{compact(r.baseline.totalRunCost, p.currency)}</td>
                       <td className="r">{compact(r.economics.provider.tcv, p.currency)}</td>
                       <td className={cx('r', roi < 0 && 'text-bad')}>{pct(roi, 0)}</td>
