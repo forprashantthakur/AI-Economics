@@ -150,7 +150,7 @@ export function addMonths(yyyymm: string, n: number): string {
   return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
 }
 
-export function buildContext(project: Project, catalog: Catalog, impl: ImplementationResult): ProjectionContext {
+export function buildContext(project: Project, catalog: Catalog, impl: ImplementationResult, benefitVolumeBase?: Decimal): ProjectionContext {
   const cache = new Map<string, RunSnapshot>();
   const snap = (rampFactor: number, yearIndex: number) => {
     const key = `${rampFactor}|${yearIndex}`;
@@ -158,7 +158,7 @@ export function buildContext(project: Project, catalog: Catalog, impl: Implement
     return cache.get(key)!;
   };
   const baseline = snap(1, 0);
-  const baseAttempted = baseline.totals.attempted;
+  const baseAttempted = benefitVolumeBase ?? baseline.totals.attempted;
   const steadyValue = computeValueMonth(project, catalog, baseline, 'steady', baseAttempted);
   const T = Math.max(1, project.pricing.termMonths);
   const bases: MonthBase[] = [];

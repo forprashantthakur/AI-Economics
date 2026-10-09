@@ -54,7 +54,8 @@ export function buildValue(w: WB): void {
     w.input(sh, r, LP.col.cur, pi.currency, 'text');
     w.input(sh, r, LP.col.fteh, pi.productiveHoursPerFteMonth, 'dec2');
     w.calc(sh, r, LP.col.hb, `${x('manual')}/60`, 'factor');
-    const assisted = `IF(${w.at(`wf.${i}.borne`, sh)}="client",${per(`hr.${i}.ch`)},${per(`abu.${i}.ha`)}*${sp}/60)`;
+    // Client-borne: review minutes on assisted completions only; rejected work is counted once as a manual redo below.
+    const assisted = `IF(${w.at(`wf.${i}.borne`, sh)}="client",${per(`hr.${i}.ah`)},${per(`abu.${i}.ha`)}*${sp}/60)`;
     w.calc(sh, r, LP.col.ha, `${per(`abu.${i}.aut`)}*${sp}/60+${assisted}+(${per(`abu.${i}.fail`)}+${per(`abu.${i}.rej`)})*${x('manual')}/60`, 'factor');
     w.calc(sh, r, LP.col.hs, `${x('hb')}-${x('ha')}`, 'factor');
     w.calc(sh, r, LP.col.pv, `${x('hs')}*${x('rate')}*${fxf(x('cur'))}`, 'unit');

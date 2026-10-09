@@ -193,6 +193,7 @@ export function buildExec(w: WB): void {
     w.put(`hr.${i}.cost`, sh, r, LH.col.cost);
     w.put(`hr.${i}.rw`, sh, r, LH.col.rw);
     w.put(`hr.${i}.ch`, sh, r, LH.col.ch);
+    w.put(`hr.${i}.ah`, sh, r, LH.col.ah);
     r++;
   });
   r++;

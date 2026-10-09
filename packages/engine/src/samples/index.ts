@@ -152,7 +152,7 @@ function customerService(catalog: Catalog): Project {
   p.value.productivity[0].loadedHourlyCost = 420;
 
   p.pricing.streams = [
-    { id: 's-impl', type: 'fixed_fee', label: 'Implementation fee', enabled: true, recovers: ['IMPLEMENTATION'], targetMarginPct: 30, discountPct: 0 },
+    { id: 's-impl', type: 'fixed_fee', label: 'Implementation fee', enabled: true, recovers: ['IMPLEMENTATION'], targetMarginPct: 32, discountPct: 0 },
     { id: 's-sub', type: 'subscription', label: 'Platform subscription', enabled: true, recovers: ['INFRASTRUCTURE', 'AGENTOPS', 'RAG', 'OTHER'], targetMarginPct: 30, discountPct: 0 },
     { id: 's-abu', type: 'abu', label: 'Per-resolution ABU pricing', enabled: true, recovers: ['LLM', 'ORCHESTRATION', 'DOCUMENT', 'HUMAN_REVIEW'], targetMarginPct: 40, discountPct: 0 },
   ];

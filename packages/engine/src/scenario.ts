@@ -143,22 +143,26 @@ export function steadyGrossProfit(project: Project, catalog: Catalog, book: Pric
   return sum(lines.map((l) => l.amount)).minus(snap.totalRunCost);
 }
 
-/** Monthly volume (steady state) at which run-rate gross profit is zero, at locked prices. */
+/**
+ * Lowest monthly volume (steady state, locked prices) above which run-rate gross profit stays
+ * non-negative. Scans a multiplier grid (minimum commitments can make small volumes profitable
+ * while mid volumes lose money), then bisects the last loss-to-profit crossing.
+ */
 export function breakEven(project: Project, catalog: Catalog, book: PriceBook): BreakEven | null {
   const baseVolume = project.workflows.reduce((a, w) => a + w.monthlyVolume, 0);
   if (baseVolume <= 0) return null;
   const baseAttempted = D(baseVolume);
   const gp = (k: number) => steadyGrossProfit(project, catalog, book, k, baseAttempted);
-  let lo = 0.0001;
-  let hi = 1;
-  if (gp(lo).gte(0)) return { multiplier: 0, monthlyVolume: 0, status: 'below' };
-  if (gp(hi).lt(0)) {
-    while (gp(hi).lt(0)) {
-      lo = hi;
-      hi *= 2;
-      if (hi > 128) return { multiplier: hi, monthlyVolume: baseVolume * hi, status: 'above' };
-    }
-  }
+  const grid = [0.0001, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16, 32, 64, 128];
+  const values = grid.map((k) => gp(k));
+  let lastLoss = -1;
+  values.forEach((v, i) => {
+    if (v.lt(0)) lastLoss = i;
+  });
+  if (lastLoss === -1) return { multiplier: 0, monthlyVolume: 0, status: 'below' };
+  if (lastLoss === grid.length - 1) return { multiplier: grid[lastLoss], monthlyVolume: baseVolume * grid[lastLoss], status: 'above' };
+  let lo = grid[lastLoss];
+  let hi = grid[lastLoss + 1];
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2;
     if (gp(mid).gte(0)) hi = mid;
@@ -196,12 +200,14 @@ export interface ScenarioRun {
 export function runScenario(base: ProjectResult, catalog: Catalog, o: ScenarioOverrides, withBreakEven = true): ScenarioRun {
   const project = applyScenario(base.project, o);
   const mult = D(o.priceMultiplier ?? 1);
+  // Volume-scaled benefits were estimated at the base project's volume, so they move with scenario volume.
+  const benefitVolumeBase = base.baseline.totals.attempted;
   let result: ProjectResult;
   if (o.repriceAtTargetMargin) {
-    result = computeProject(project, catalog, { packages: false });
-    if (!mult.eq(1)) result = computeProject(project, catalog, { packages: false, priceBook: { ...result.priceBook, priceMultiplier: mult } });
+    result = computeProject(project, catalog, { packages: false, benefitVolumeBase });
+    if (!mult.eq(1)) result = computeProject(project, catalog, { packages: false, benefitVolumeBase, priceBook: { ...result.priceBook, priceMultiplier: mult } });
   } else {
-    result = computeProject(project, catalog, { packages: false, priceBook: { ...base.priceBook, priceMultiplier: mult } });
+    result = computeProject(project, catalog, { packages: false, benefitVolumeBase, priceBook: { ...base.priceBook, priceMultiplier: mult } });
   }
   return { project, result, metrics: metricsOf(result, catalog, withBreakEven) };
 }

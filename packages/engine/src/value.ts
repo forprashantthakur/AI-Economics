@@ -67,8 +67,12 @@ export function productivityFor(project: Project, catalog: Catalog, snap: RunSna
       const manual = D(p.manualMinutesBefore);
       const spot = D(p.spotCheckMinutesAutonomous);
       const hoursBefore = v.attempted.times(manual).div(60);
-      const clientReview = snap.clientReviewHoursByWorkflow[p.workflowId] ?? ZERO;
-      const assistedHours = wf.humanReview.borneBy === 'client' ? clientReview : v.humanAssisted.times(spot).div(60);
+      // Client-borne review: client staff spend the review minutes on each assisted completion. Rejected
+      // transactions are counted once, as a full manual redo (fallbackHours), not also as review rework.
+      const assistedHours =
+        wf.humanReview.borneBy === 'client'
+          ? v.humanAssisted.times(D(wf.humanReview.minutesPerAssistedTxn)).times(v.humanEffortMix).div(60)
+          : v.humanAssisted.times(spot).div(60);
       const fallbackHours = v.failed.plus(v.rejected).times(manual).div(60);
       const hoursAfter = v.autonomous.times(spot).div(60).plus(assistedHours).plus(fallbackHours);
       const hoursSaved = hoursBefore.minus(hoursAfter);

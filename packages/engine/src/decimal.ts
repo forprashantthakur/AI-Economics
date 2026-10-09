@@ -65,6 +65,14 @@ export function priceForMargin(cost: DecLike, marginPct: DecLike): Decimal {
   return D(cost).div(ONE.minus(m));
 }
 
+/** Highest margin the pricing engine will apply; validation reports anything at or above 100% as an error. */
+export const MAX_MARGIN_PCT = 99;
+
+/** priceForMargin with the margin clamped to [-∞, MAX_MARGIN_PCT] so bad inputs never crash a computation. */
+export function priceAtMargin(cost: DecLike, marginPct: DecLike): Decimal {
+  return priceForMargin(cost, Decimal.min(D(marginPct), MAX_MARGIN_PCT));
+}
+
 /** Gross margin % from revenue and cost. 0 when revenue is 0. */
 export function marginPct(revenue: DecLike, cost: DecLike): Decimal {
   const r = D(revenue);

@@ -11,7 +11,7 @@ import { buildSnapshot, type RunSnapshot } from './model';
 import { buildPriceBook, type Issue, type MarginalCosts, type PriceBook } from './pricing';
 import { buildContext, runProjection, type ProjectionContext, type ProjectionResult } from './projection';
 import { computePackages, type PackageResult } from './commercial';
-import { validateProject } from './validate';
+import { currenciesUsed, validateProject } from './validate';
 
 export interface ReconCheck {
   id: string;
@@ -39,6 +39,11 @@ export interface ComputeOptions {
   packages?: boolean;
   /** Use an existing (contracted) price book instead of deriving prices. */
   priceBook?: PriceBook;
+  /**
+   * Monthly attempted volume that volume-scaled benefits were estimated at. Defaults to this project's
+   * own steady-state volume; scenarios pass the original project's volume so benefits move with volume.
+   */
+  benefitVolumeBase?: Decimal;
 }
 
 export function marginalCosts(project: Project, catalog: Catalog, baseline: RunSnapshot): MarginalCosts {
@@ -50,9 +55,21 @@ export function marginalCosts(project: Project, catalog: Catalog, baseline: RunS
   };
 }
 
-export function computeProject(project: Project, catalog: Catalog, opts: ComputeOptions = {}): ProjectResult {
+/**
+ * Returns the catalogue unchanged when every currency the project uses has an FX rate; otherwise a copy
+ * whose FX table treats each missing currency as 1:1 with the base, so the computation never fails
+ * (validateProject reports FX_MISSING as an error so the user fixes the rate).
+ */
+export function withFxFallback(project: Project, catalog: Catalog): Catalog {
+  const missing = [...currenciesUsed(project, catalog)].filter((c) => !catalog.fx.rates[c] && c !== catalog.fx.base);
+  if (!missing.length) return catalog;
+  return { ...catalog, fx: { ...catalog.fx, rates: { ...catalog.fx.rates, ...Object.fromEntries(missing.map((c) => [c, 1])) } } };
+}
+
+export function computeProject(project: Project, inputCatalog: Catalog, opts: ComputeOptions = {}): ProjectResult {
+  const catalog = withFxFallback(project, inputCatalog);
   const implementation = computeImplementation(project.implementation, project.currency, catalog.fx);
-  const context = buildContext(project, catalog, implementation);
+  const context = buildContext(project, catalog, implementation, opts.benefitVolumeBase);
   const baseline = context.baseline;
   const marginal = marginalCosts(project, catalog, baseline);
   const priceBook = opts.priceBook ?? buildPriceBook({ project, baseline, impl: implementation, marginal });
@@ -60,7 +77,7 @@ export function computeProject(project: Project, catalog: Catalog, opts: Compute
   const packages = opts.packages === false ? [] : computePackages(context, marginal, { priceBook, projection });
 
   const issues: Issue[] = [
-    ...validateProject(project, catalog),
+    ...validateProject(project, inputCatalog),
     ...priceBook.issues,
     ...baseline.warnings.map((m) => ({ severity: 'warning' as const, code: 'MODEL', message: m })),
     ...implementation.scheduleErrors.map((m) => ({ severity: 'error' as const, code: 'SCHEDULE', message: m })),

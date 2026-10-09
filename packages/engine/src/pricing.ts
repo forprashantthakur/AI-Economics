@@ -12,7 +12,7 @@
  *   ABU price  = recovered cost per weighted accepted ABU / (1 − target margin)
  *   Fee        = recovered monthly cost / (1 − target margin)
  */
-import { D, Decimal, ONE, ZERO, compound, pct, priceForMargin, safeDiv, sum, max, min } from './decimal';
+import { D, Decimal, ONE, ZERO, compound, pct, priceAtMargin, safeDiv, sum, max, min } from './decimal';
 import type { CostPool, Project, RevenueStream, VolumeTier } from './types';
 import { RUN_POOLS, POOL_LABELS } from './types';
 import type { RunSnapshot } from './model';
@@ -56,7 +56,7 @@ export interface StreamPrice {
   floorPrice?: Decimal;
   floorApplied?: boolean;
   overridden?: boolean;
-  abu?: { byWorkflow: Record<string, AbuWorkflowPrice>; blendedPrice: Decimal };
+  abu?: { byWorkflow: Record<string, AbuWorkflowPrice>; blendedPrice: Decimal; blendedFloor: Decimal };
   subscription?: {
     platformFee: Decimal;
     includedUnit: 'acu' | 'abu' | 'none';
@@ -196,21 +196,23 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
       if (runPools.length) issues.push({ severity: 'error', code: 'FIXED_FEE_RUN_POOLS', message: `"${s.label}" is a one-time fee and can only recover implementation cost.` });
       const recovered = pools.includes('IMPLEMENTATION') ? impl.totalCost : ZERO;
       let fee: Decimal;
-      if (s.useImplementationPlanPrice === false || !pools.includes('IMPLEMENTATION')) {
-        fee = recovered.isZero() ? ZERO : priceForMargin(recovered, s.targetMarginPct).times(ONE.minus(pct(s.discountPct)));
+      const usesPlan = !(s.useImplementationPlanPrice === false || !pools.includes('IMPLEMENTATION'));
+      if (!usesPlan) {
+        fee = recovered.isZero() ? ZERO : priceAtMargin(recovered, s.targetMarginPct).times(ONE.minus(pct(s.discountPct)));
       } else {
         fee = impl.price; // single source of truth: the implementation plan's pricing method, margin and discount
       }
-      out.push({ ...base, recoveredCost: recovered, oneTimeFee: fee });
+      // When the plan sets the price, report the plan's actual margin rather than the stream's (unused) target.
+      out.push({ ...base, targetMarginPct: usesPlan ? impl.marginPct.toNumber() : s.targetMarginPct, recoveredCost: recovered, oneTimeFee: fee });
     } else if (s.type === 'acu') {
       const recovered = recurringCost(s, pools);
       const acus = baseline.acu.total;
       const unitCost = safeDiv(recovered, acus);
-      const list = acus.isZero() ? ZERO : priceForMargin(unitCost, s.targetMarginPct);
+      const list = acus.isZero() ? ZERO : priceAtMargin(unitCost, s.targetMarginPct);
       const rc = cfg.acuRateCard;
       const overridden = rc.priceOverride !== null && rc.priceOverride !== undefined;
       let price = overridden ? D(rc.priceOverride!) : list.times(ONE.minus(pct(s.discountPct)));
-      const floorPrice = unitCost.isZero() ? ZERO : priceForMargin(unitCost, rc.marginFloorPct);
+      const floorPrice = unitCost.isZero() ? ZERO : priceAtMargin(unitCost, rc.marginFloorPct);
       let floorApplied = false;
       if (price.lt(floorPrice)) {
         floorApplied = true;
@@ -238,11 +240,11 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
         const factor = D(rc.humanAssistedPriceFactor ?? 1);
         const billableUnits = sum(v.byClass.map((c) => c.autonomous.plus(c.humanAssisted.times(factor)).times(c.abuWeight)));
         const costPerAbu = safeDiv(recovered, v.weightedAbus);
-        const list = billableUnits.isZero() ? ZERO : priceForMargin(recovered, s.targetMarginPct).div(billableUnits);
+        const list = billableUnits.isZero() ? ZERO : priceAtMargin(recovered, s.targetMarginPct).div(billableUnits);
         const ov = rc.priceOverrides?.[wf.id];
         const overridden = ov !== null && ov !== undefined;
         let price = overridden ? D(ov) : list.times(ONE.minus(pct(s.discountPct)));
-        const floorPrice = billableUnits.isZero() ? ZERO : priceForMargin(costPerAbu, rc.marginFloorPct).times(safeDiv(v.weightedAbus, billableUnits));
+        const floorPrice = billableUnits.isZero() ? ZERO : priceAtMargin(costPerAbu, rc.marginFloorPct).times(safeDiv(v.weightedAbus, billableUnits));
         let floorApplied = false;
         if (price.lt(floorPrice)) {
           floorApplied = true;
@@ -258,7 +260,8 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
         revenueAtBasis = revenueAtBasis.plus(abuRawRevenue(byWorkflow[wf.id], v.byClass));
       }
       const blendedPrice = safeDiv(revenueAtBasis, baseline.totals.weightedAbus);
-      out.push({ ...base, recoveredCost: recoveredRun.plus(implPart), abu: { byWorkflow, blendedPrice }, unitPrice: blendedPrice, unitCost: safeDiv(recoveredRun.plus(implPart), baseline.totals.weightedAbus) });
+      const blendedFloor = safeDiv(sum(Object.values(byWorkflow).map((w) => w.floorPrice.times(w.billableUnits))), baseline.totals.weightedAbus);
+      out.push({ ...base, recoveredCost: recoveredRun.plus(implPart), abu: { byWorkflow, blendedPrice, blendedFloor }, unitPrice: blendedPrice, unitCost: safeDiv(recoveredRun.plus(implPart), baseline.totals.weightedAbus) });
     }
   }
 
@@ -268,7 +271,7 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
     const disc = ONE.minus(pct(s.discountPct));
     if (s.type === 'fixed_monthly' || s.type === 'agentops') {
       const recovered = recurringCost(s, pools);
-      const fee = recovered.isZero() ? ZERO : priceForMargin(recovered, s.targetMarginPct).times(disc);
+      const fee = recovered.isZero() ? ZERO : priceAtMargin(recovered, s.targetMarginPct).times(disc);
       out.push({ ...base, recoveredCost: recovered, monthlyFee: fee });
     } else if (s.type === 'pass_through') {
       out.push({ ...base, recoveredCost: recurringCost(s, pools) });
@@ -282,7 +285,7 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
       });
     } else if (s.type === 'subscription') {
       const recovered = recurringCost(s, pools);
-      const platformFee = recovered.isZero() ? ZERO : priceForMargin(recovered, s.targetMarginPct).times(disc);
+      const platformFee = recovered.isZero() ? ZERO : priceAtMargin(recovered, s.targetMarginPct).times(disc);
       const sub = cfg.subscription;
       const includedQty = sub.includedUnit === 'none' ? ZERO : D(sub.includedQty);
       const unitStream = sub.includedUnit === 'acu' ? acuStream : sub.includedUnit === 'abu' ? abuStream : undefined;
@@ -296,7 +299,7 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
           includedValue = includedQty.times(allowanceUnitPrice).times(ONE.minus(pct(sub.includedDiscountPct)));
         } else {
           const mc = sub.includedUnit === 'acu' ? marginal.perAcu : marginal.perAbu;
-          allowanceUnitPrice = mc.isZero() ? ZERO : priceForMargin(mc, s.targetMarginPct);
+          allowanceUnitPrice = mc.isZero() ? ZERO : priceAtMargin(mc, s.targetMarginPct);
         }
         overageRate = allowanceUnitPrice.times(ONE.plus(pct(sub.overagePremiumPct)));
       }
@@ -425,7 +428,7 @@ export function revenueForMonth(book: PriceBook, ctx: RevenueContext): RevenueLi
           let billed = raw;
           if (rc.tiers.length && total.gt(0)) {
             const blended = safeDiv(raw, total);
-            billed = tieredCharge(total, blended, rc.tiers, rc.tierMode);
+            billed = tieredCharge(total, blended, rc.tiers, rc.tierMode, a.blendedFloor.times(esc));
           }
           lines.push({ streamId: s.streamId, key: 'usage', label: s.label, amount: billed, recurring: true });
           const minAbus = D(rc.minMonthlyAbus);

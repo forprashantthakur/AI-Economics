@@ -5,7 +5,7 @@
  * Fixed price (cost-plus) = Implementation Cost / (1 − target margin) × (1 − discount)
  * T&M value              = Σ(effort × bill rate) + billable expenses
  */
-import { D, Decimal, ZERO, pct, priceForMargin, marginPct, sum, addTo } from './decimal';
+import { D, Decimal, ZERO, pct, priceAtMargin, marginPct, sum, addTo } from './decimal';
 import type { FxTable, ImplementationPlan } from './types';
 import { convert } from './fx';
 
@@ -143,7 +143,7 @@ export function computeImplementation(plan: ImplementationPlan, currency: string
   const contingency = laborCost.plus(directExpenses).times(pct(plan.contingencyPct));
   const totalCost = laborCost.plus(directExpenses).plus(contingency);
   const tmValue = sum(activities.map((a) => a.billValue)).plus(billableExpenses);
-  const cpmPrice = totalCost.isZero() ? ZERO : priceForMargin(totalCost, plan.targetMarginPct);
+  const cpmPrice = totalCost.isZero() ? ZERO : priceAtMargin(totalCost, plan.targetMarginPct);
   const listPrice = plan.pricingMethod === 'time_and_materials' ? tmValue : cpmPrice;
   const price = listPrice.times(D(1).minus(pct(plan.discountPct)));
 

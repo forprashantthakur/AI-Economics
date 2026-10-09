@@ -7,6 +7,29 @@ import { ACU_RESOURCES } from './acu';
 
 const near = (a: number, b: number, tol = 0.5) => Math.abs(a - b) <= tol;
 
+/** Every currency code a project (and the models it routes to) refers to. */
+export function currenciesUsed(project: Project, catalog: Catalog): Set<string> {
+  const models = new Map(catalog.modelRates.map((m) => [m.id, m]));
+  const set = new Set<string>([project.currency, project.acu.referenceCurrency]);
+  for (const wf of project.workflows) {
+    set.add(wf.humanReview.currency);
+    for (const st of wf.llmSteps) for (const r of st.routing) if (models.get(r.modelId)) set.add(models.get(r.modelId)!.currency);
+  }
+  for (const l of project.costLines) set.add(l.currency);
+  for (const id of new Set(project.costLines.map((l) => l.priceRef).filter(Boolean))) {
+    const item = catalog.cloudPrices.find((c) => c.id === id);
+    if (item) set.add(item.currency);
+  }
+  for (const r of project.implementation.roles) set.add(r.currency);
+  for (const e of project.implementation.directExpenses) set.add(e.currency);
+  for (const b of project.value.benefits) set.add(b.currency);
+  for (const c of project.value.clientCosts) set.add(c.currency);
+  for (const pi of project.value.productivity) set.add(pi.currency);
+  for (const a of project.actuals) set.add(a.currency);
+  set.delete('');
+  return set;
+}
+
 export function validateProject(project: Project, catalog: Catalog): Issue[] {
   const issues: Issue[] = [];
   const add = (severity: Issue['severity'], code: string, message: string) => issues.push({ severity, code, message });
@@ -52,8 +75,9 @@ export function validateProject(project: Project, catalog: Catalog): Issue[] {
         if (m.sample) usesSample = true;
         if (m.pricingBasis === 'self_hosted') usesSelfHosted = true;
         currencies.add(m.currency);
-        const util = ((st.inputTokens + st.outputTokens + st.reasoningTokens) / (m.contextWindow || Infinity)) * 100;
-        if (util > 90) add('warning', 'CONTEXT_WINDOW', `${label}: "${st.name}" uses ${util.toFixed(0)}% of ${m.model}'s context window.`);
+        const peak = Math.max(1, ...wf.complexity.map((c) => c.consumptionMultiplier));
+        const util = (((st.inputTokens + st.outputTokens + st.reasoningTokens) * peak) / (m.contextWindow || Infinity)) * 100;
+        if (util > 90) add('warning', 'CONTEXT_WINDOW', `${label}: "${st.name}" uses up to ${util.toFixed(0)}% of ${m.model}'s context window on the most complex transactions.`);
       }
     }
   }
@@ -103,11 +127,11 @@ export function validateProject(project: Project, catalog: Catalog): Issue[] {
   const roleIds = new Set(project.implementation.roles.map((r) => r.id));
   for (const a of project.implementation.activities) if (!roleIds.has(a.roleId)) add('warning', 'UNKNOWN_ROLE', `Activity "${a.name}" has no valid role/rate.`);
   for (const r of project.implementation.roles) currencies.add(r.currency);
-  if (project.implementation.targetMarginPct >= 100) add('error', 'MARGIN_RANGE', 'Implementation target margin must be below 100%.');
+  if (project.implementation.targetMarginPct >= 100) add('error', 'MARGIN_RANGE', 'Implementation target margin must be below 100% (it is capped at 99%).');
 
   // Pricing
   for (const s of project.pricing.streams.filter((x) => x.enabled)) {
-    if (s.targetMarginPct >= 100) add('error', 'MARGIN_RANGE', `"${s.label}": target margin must be below 100%.`);
+    if (s.targetMarginPct >= 100) add('error', 'MARGIN_RANGE', `"${s.label}": target margin must be below 100% (it is capped at 99%).`);
     if (s.type === 'fixed_fee' && s.recovers.some((p) => p !== 'IMPLEMENTATION')) add('error', 'FIXED_FEE_RUN_POOLS', `"${s.label}" is a one-time fee and can only recover implementation cost.`);
   }
   const sub = project.pricing.subscription;
@@ -128,6 +152,13 @@ export function validateProject(project: Project, catalog: Catalog): Issue[] {
     if (!project.value.productivity.some((p) => p.workflowId === wf.id)) add('info', 'NO_PRODUCTIVITY', `No productivity baseline for workflow "${wf.name}".`);
   for (const c of project.value.clientCosts) currencies.add(c.currency);
 
-  for (const c of currencies) if (c && !fx.rates[c] && c !== fx.base) add('error', 'FX_MISSING', `No FX rate configured for ${c}.`);
+  for (const c of new Set([...currencies, ...currenciesUsed(project, catalog)]))
+    if (c && !fx.rates[c] && c !== fx.base) add('error', 'FX_MISSING', `No FX rate configured for ${c}. Amounts in ${c} are treated as 1:1 with ${fx.base} until you add the rate in Settings → FX rates.`);
+  if (!(project.pricing.termMonths >= 1)) add('error', 'TERM', 'Contract term must be at least 1 month (it is treated as 1).');
+  for (const [name, v] of [
+    ['ACU rate card margin floor', project.pricing.acuRateCard.marginFloorPct],
+    ['ABU rate card margin floor', project.pricing.abuRateCard.marginFloorPct],
+  ] as const)
+    if (v >= 100) add('error', 'MARGIN_RANGE', `${name} must be below 100% (it is capped at 99%).`);
   return issues;
 }
