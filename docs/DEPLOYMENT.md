@@ -147,6 +147,22 @@ docker compose exec db pg_dump -U aies -d aies > aies-backup.sql
 
 The CLI takes `migrate`, `seed` or `create-user <email> <role> [name]`.
 
+## Vercel (web app)
+
+The repository includes `vercel.json`, so Vercel builds the web app with no extra settings:
+
+| Setting | Value (from `vercel.json`) |
+|---|---|
+| Install command | `npm ci --no-audit --no-fund` |
+| Build command | `npm run build -w @aies/web` |
+| Output directory | `apps/web/dist` |
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import the GitHub repository.
+2. Keep the root directory as the repository root (the build needs the engine and reports workspaces).
+3. Click **Deploy**. Every push to `main` then deploys automatically, and pull requests get preview URLs.
+
+On Vercel the app runs in browser mode: projects are kept in each user's browser (export and import JSON to move them). The API is a long-running Fastify server with PostgreSQL, so host it separately (for example Render, Railway or a VM with Docker Compose), set its `CORS_ORIGIN` to the Vercel URL, and enter the API address under **Settings → Data → Connect to the studio server**.
+
 ## Manual deployment (VM or Kubernetes)
 
 This is an outline; adapt it to your platform.
