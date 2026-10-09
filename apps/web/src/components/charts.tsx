@@ -220,7 +220,15 @@ export function StackedBars({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 4 }} barCategoryGap="28%">
         <CartesianGrid vertical={false} />
-        <XAxis dataKey={xKey} tickLine={false} axisLine={{ stroke: color('--line') }} tickFormatter={labelFormat} interval="preserveStartEnd" minTickGap={12} />
+        <XAxis
+          dataKey={xKey}
+          tickLine={false}
+          axisLine={{ stroke: color('--line') }}
+          tickFormatter={labelFormat ?? ((l: string) => (String(l).length > 16 ? String(l).slice(0, 15) + '…' : String(l)))}
+          interval={data.length <= 10 ? 0 : 'preserveStartEnd'}
+          tick={{ fontSize: data.length > 6 ? 11 : 12 }}
+          minTickGap={12}
+        />
         <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => format(v)} width={64} />
         <Tooltip cursor={{ fill: color('--line-soft') }} content={<ChartTooltip format={format} series={series} labelFormat={labelFormat} />} />
         {series.map((s, i) => (

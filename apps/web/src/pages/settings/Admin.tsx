@@ -82,7 +82,7 @@ export function UsersTab() {
               <span className="font-semibold text-ink">Business leaders</span> view and export only.
             </li>
           </ul>
-          <p className="text-[12.5px] text-ink-3 mt-3">The same permission matrix is enforced by the API when the studio is connected to a server.</p>
+          <p className="text-[12.5px] text-ink-3 mt-3">The same permission matrix is enforced by the API server when this workspace is connected to it (Settings → Data).</p>
         </Panel>
       </div>
 
@@ -316,7 +316,7 @@ export function DataTab() {
       )}
 
       <Callout>
-        Data is stored in this browser only. Clearing site data, a private window or another device starts from the sample data. Export regularly, or connect the studio to the API server for shared storage. Individual projects can be
+        Data is stored in this browser only. Clearing site data, a private window or another device starts from the sample data. Export regularly, or connect to the studio server above for shared PostgreSQL storage. Individual projects can be
         exported and imported from the Projects page.
       </Callout>
 

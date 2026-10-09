@@ -106,7 +106,7 @@ export function months(v: number | null | undefined): string {
 export function periodLabel(yyyymm: string): string {
   const [y, m] = yyyymm.split('-').map(Number);
   if (!y || !m) return yyyymm;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 export function dateTime(iso: string): string {

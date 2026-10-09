@@ -39,6 +39,11 @@ export interface WizardForm {
   workflowSteps: number;
   toolCallsPerExecution: number;
   tokenMultiplier: number;
+  /** null = as designed in the template. Otherwise every step's calls are scaled to this total. */
+  modelCallsPerTxn: number | null;
+  /** null = as designed in the template. Otherwise the call-weighted averages are scaled to these values. */
+  avgInputTokens: number | null;
+  avgOutputTokens: number | null;
   retryRatePct: number;
   successRatePct: number;
   humanInterventionRatePct: number;
@@ -85,6 +90,9 @@ export function defaultForm(currencies: string[]): WizardForm {
     workflowSteps: 10,
     toolCallsPerExecution: 5,
     tokenMultiplier: 1,
+    modelCallsPerTxn: null,
+    avgInputTokens: null,
+    avgOutputTokens: null,
     retryRatePct: 5,
     successRatePct: 92,
     humanInterventionRatePct: 15,
@@ -207,6 +215,7 @@ export function buildProject(f: WizardForm, catalog: Catalog, templates: Process
   const wf = p.workflows[0];
   wf.workflowSteps = f.workflowSteps;
   wf.toolCallsPerExecution = f.toolCallsPerExecution;
+  applyCallProfile(wf.llmSteps, f);
   p.solution.workingDaysPerMonth = f.workingDays;
   p.costLines = buildCostLines(
     {
@@ -225,4 +234,34 @@ export function buildProject(f: WizardForm, catalog: Catalog, templates: Process
     `${p.id}-c`,
   );
   return p;
+}
+
+/** Call-weighted averages of the steps' tokens per model call. */
+export function callProfile(steps: { callsPerExecution: number; inputTokens: number; outputTokens: number }[]) {
+  const calls = steps.reduce((a, s) => a + s.callsPerExecution, 0);
+  const avg = (k: 'inputTokens' | 'outputTokens') => (calls ? steps.reduce((a, s) => a + s.callsPerExecution * s[k], 0) / calls : 0);
+  return { calls, avgInput: avg('inputTokens'), avgOutput: avg('outputTokens') };
+}
+
+/** Scale the template's steps so total calls and average tokens per call match the wizard's answers. */
+export function applyCallProfile(steps: { callsPerExecution: number; inputTokens: number; outputTokens: number; cacheablePrefixTokens: number; reasoningTokens: number }[], f: Pick<WizardForm, 'modelCallsPerTxn' | 'avgInputTokens' | 'avgOutputTokens'>) {
+  const p = callProfile(steps);
+  if (f.modelCallsPerTxn !== null && p.calls > 0) {
+    const k = f.modelCallsPerTxn / p.calls;
+    for (const s of steps) s.callsPerExecution = Math.round(s.callsPerExecution * k * 1000) / 1000;
+  }
+  if (f.avgInputTokens !== null && p.avgInput > 0) {
+    const k = f.avgInputTokens / p.avgInput;
+    for (const s of steps) {
+      s.inputTokens = Math.round(s.inputTokens * k);
+      s.cacheablePrefixTokens = Math.min(s.inputTokens, Math.round(s.cacheablePrefixTokens * k));
+    }
+  }
+  if (f.avgOutputTokens !== null && p.avgOutput > 0) {
+    const k = f.avgOutputTokens / p.avgOutput;
+    for (const s of steps) {
+      s.outputTokens = Math.round(s.outputTokens * k);
+      s.reasoningTokens = Math.round(s.reasoningTokens * k);
+    }
+  }
 }

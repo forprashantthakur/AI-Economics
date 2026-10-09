@@ -11,5 +11,5 @@
     "dev:api": "npm run dev -w @aies/api",
     "build": "npm run build -w @aies/web && npm run build -w @aies/api"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=22.12" }
 }

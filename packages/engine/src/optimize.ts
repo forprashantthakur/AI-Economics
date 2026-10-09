@@ -7,6 +7,7 @@ import { Decimal, ZERO } from './decimal';
 import type { Catalog, ModelRate, Project } from './types';
 import { buildSnapshot } from './model';
 import { applyScenario } from './scenario';
+import { withFxFallback } from './compute';
 
 export interface Optimization {
   id: string;
@@ -20,7 +21,8 @@ export interface Optimization {
 
 const steadyCost = (p: Project, c: Catalog) => buildSnapshot(p, c, { rampFactor: 1, yearIndex: 0 }).totalRunCost;
 
-export function findOptimizations(project: Project, catalog: Catalog): Optimization[] {
+export function findOptimizations(project: Project, inputCatalog: Catalog): Optimization[] {
+  const catalog = withFxFallback(project, inputCatalog);
   const base = steadyCost(project, catalog);
   if (base.isZero()) return [];
   const out: Optimization[] = [];

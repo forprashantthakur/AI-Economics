@@ -204,7 +204,7 @@ Shared assumptions:
 - **RAG.** Vector search at 3 queries per execution, 60 GB of index storage, 150M embedding tokens a month and 4 re-index runs.
 - **AgentOps.** L1 1.5, L2 0.5, L3 0.25, evaluation 0.25 and governance 0.25 FTE.
 - **Pricing:**
-  - Fixed implementation fee (plan price at 32%; the stream's own 30% is not used by default).
+  - Fixed implementation fee at the plan price (32% margin).
   - **Subscription** recovers infrastructure, AgentOps, RAG and other costs at 30%, with **80,000 weighted ABUs included** at 5% off and a 10% overage premium.
   - **ABU stream** recovers LLM, orchestration, document processing and human review at 40%.
 - **Client costs.** INR 2,500,000 one-time; INR 200,000 a month for channel platform licences.
@@ -264,14 +264,14 @@ Price and revenue:
 
 ### Client value
 
-Review is client-borne, so it reduces client hours saved rather than appearing as provider cost:
+Review is client-borne, so it reduces client hours saved rather than appearing as provider cost. Client staff spend their review minutes on each human-assisted completion. Failed and rejected interactions are counted once each, as a full manual redo.
 
-| Workflow | Client review hours a month | Hours saved a month |
-|---|---:|---:|
-| Query resolution | 879.95 | 9,466.39 |
-| Complaint and refund | 781.57 | 3,492.14 |
+| Workflow | Hours before | Client review of assisted completions | Manual redo of failed and rejected | Hours saved a month |
+|---|---:|---:|---:|---:|
+| Query resolution | 12,750.00 | 505.95 | 2,091.00 | 9,840.39 (77.18%) |
+| Complaint and refund | 5,500.00 | 655.57 | 1,157.20 | 3,618.14 (65.78%) |
 
-Steady productivity is 12,958.53 hours a month (92.56 FTE, INR 5,547,348.37), which is not counted in ROI.
+Steady productivity is 13,458.53 hours a month (96.13 FTE, INR 5,761,128.37), which is not counted in ROI.
 
 | Benefit line | Category | Status | Steady monthly (gross) | Counted (validated) |
 |---|---|---|---:|---:|
@@ -322,7 +322,7 @@ There are four agents: planning, knowledge retrieval, drafting, and compliance r
 | ACU | **Method B (weighted resources)** with the approved "Standard ACU weights v1.0" |
 | AgentOps | L1 0.5, L2 0.5, L3 0.25, evaluation 0.25 and governance 0.25 FTE |
 | Pricing | Fixed implementation fee (plan price at 32%). **Subscription** recovers infrastructure, AgentOps, human review and other costs at 30%, with **200,000 ACUs included** at 5% off and a 15% overage premium. **ACU stream** recovers LLM, orchestration, RAG and document processing at 40%. |
-| ACU tiers | Graduated 5% above 300,000 and 10% above 600,000. They are configured but have no effect, because the ACU stream bills only subscription overage; see METHODOLOGY section 20, item 12. |
+| ACU tiers | None. Overage above the 200,000 included ACUs is billed at one flat overage rate (METHODOLOGY section 10.9). |
 | Client costs | INR 1,200,000 one-time for content curation and SME onboarding |
 
 ### Implementation
@@ -394,7 +394,17 @@ Revenue:
 
 ### Client value
 
-Every accepted response is human-assisted and review is client-borne. The bid team's review time (2,018.52 hours a month, including rework) is therefore deducted from hours saved. Steady productivity is 7,917.48 hours a month (56.55 FTE, INR 14,251,464.00), which is not counted in ROI.
+Every accepted response is human-assisted and review is client-borne, so the bid team's review time is deducted from hours saved:
+
+| Component | Calculation | Hours a month |
+|---|---|---:|
+| Before | 1,000 × 720 / 60 | 12,000.00 |
+| Bid-team review of assisted responses | 828 × 120 × 1.045 / 60 | 1,730.52 |
+| Manual redo of failed and rejected | (100 + 72) × 720 / 60 | 2,064.00 |
+| After | | 3,794.52 |
+| **Saved** | | **8,205.48** (68.38%) |
+
+Steady productivity is 8,205.48 hours a month (58.61 FTE, INR 14,769,864.00), which is not counted in ROI.
 
 | Benefit line | Category | Status | Steady monthly (gross) | Counted (validated) |
 |---|---|---|---:|---:|

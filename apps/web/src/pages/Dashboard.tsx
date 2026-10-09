@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageHeader, Select, Tabs } from '../components/ui';
 import { useStore, usePortfolio } from '../state/store';
 import { PERIOD_LABEL, buildSlice, type Period } from '../lib/slice';
@@ -15,6 +15,9 @@ export function Dashboard({ view: initialView }: { view?: string }) {
   const { state, dispatch } = useStore();
   const portfolio = usePortfolio();
   const [view, setView] = useState<View>((['architect', 'commercial', 'finops', 'value', 'integrity'].includes(initialView ?? '') ? initialView : 'commercial') as View);
+  useEffect(() => {
+    if (initialView && ['architect', 'commercial', 'finops', 'value', 'integrity'].includes(initialView)) setView(initialView as View);
+  }, [initialView]);
   const [client, setClient] = useState('all');
   const [period, setPeriod] = useState<Period>('steady');
   const [workflowId, setWorkflowId] = useState('all');

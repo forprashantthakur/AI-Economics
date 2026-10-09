@@ -108,6 +108,10 @@ export function ValueView({ r, period }: { r: ProjectResult; period: Period }) {
         </div>
       </Panel>
 
+      <Panel title="Adoption" description="How much of the process the AI now handles. Estimates are steady state; actuals are the latest recorded month.">
+        <AdoptionStrip r={r} />
+      </Panel>
+
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Business outcomes" description="Operational KPIs agreed with the client — tracked, not monetised.">
           {r.project.value.kpis.length === 0 ? (
@@ -176,6 +180,39 @@ export function ValueView({ r, period }: { r: ProjectResult; period: Period }) {
           )}
         </Panel>
       </div>
+    </div>
+  );
+}
+
+function AdoptionStrip({ r }: { r: ProjectResult }) {
+  const t = r.baseline.totals;
+  const share = (a: ReturnType<typeof sum>, b: ReturnType<typeof sum>) => (b.isZero() ? 0 : n(a.div(b).times(100)));
+  const last = [...r.project.actuals].sort((a, b) => b.period.localeCompare(a.period))[0];
+  const lastRows = last ? r.project.actuals.filter((a) => a.period === last.period) : [];
+  const actAttempted = lastRows.reduce((a, x) => a + x.attempted, 0);
+  const actAccepted = lastRows.reduce((a, x) => a + x.accepted, 0);
+  const est = last ? r.months.find((m) => m.month === last.monthIndex) : undefined;
+  const items = [
+    { label: 'Handled end to end by AI', value: pct(share(t.accepted, t.attempted)), sub: `${num(t.accepted)} of ${num(t.attempted)} transactions a month` },
+    { label: 'Fully autonomous', value: pct(share(t.autonomous, t.accepted)), sub: 'of accepted transactions, no person involved' },
+    { label: 'Human-assisted', value: pct(share(t.humanAssisted, t.accepted)), sub: 'reviewed or completed by a person' },
+    { label: 'Back to manual', value: pct(share(t.failed.plus(t.rejected), t.attempted)), sub: 'failed or rejected, handled the old way' },
+  ];
+  if (last && est)
+    items.push({
+      label: `Actual volume, ${periodLabel(last.period)}`,
+      value: num(actAttempted),
+      sub: `${pct(est.attempted.isZero() ? 0 : (actAttempted / n(est.attempted)) * 100, 0)} of estimate; ${pct(actAttempted ? (actAccepted / actAttempted) * 100 : 0, 0)} accepted`,
+    });
+  return (
+    <div className="grid gap-px bg-line border border-line rounded-lg overflow-hidden" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+      {items.map((i) => (
+        <div key={i.label} className="bg-paper px-3.5 py-2.5 min-w-0">
+          <div className="text-[12.5px] text-ink-3">{i.label}</div>
+          <div className="num text-[19px] font-semibold text-ink">{i.value}</div>
+          <div className="text-[12px] text-ink-3 leading-snug">{i.sub}</div>
+        </div>
+      ))}
     </div>
   );
 }

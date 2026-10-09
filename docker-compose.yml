@@ -5,7 +5,7 @@
 #   open http://localhost:8081            (web; /api is proxied to the API)
 #
 # Required: POSTGRES_PASSWORD and JWT_SECRET (>= 32 random chars, e.g. `openssl rand -base64 48`).
-# Optional: SEED_PASSWORD (demo users <role>@demo.local are created on first start), CORS_ORIGIN, API_PORT.
+# Optional: SEED_PASSWORD (demo users <role>@demo.local are created on first start), SEED_ON_START=false to skip demo data, CORS_ORIGIN, API_PORT.
 
 name: aies
 
@@ -44,6 +44,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (at least 32 random characters)}
       JWT_TTL: ${JWT_TTL:-8h}
       SEED_PASSWORD: ${SEED_PASSWORD:-}
+      SEED_ON_START: ${SEED_ON_START:-true}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       TRUST_PROXY: "1"
       LOG_LEVEL: ${LOG_LEVEL:-info}

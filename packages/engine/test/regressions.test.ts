@@ -60,3 +60,15 @@ describe('Scenario and value fixes', () => {
     expect(be.monthlyVolume).toBeGreaterThan(600);
   });
 });
+
+describe('Missing FX rates in analysis tools', () => {
+  it('waterfall, optimisation finder and break-even do not crash on a currency without a rate', async () => {
+    const { costWaterfall, findOptimizations } = await import('../src');
+    const p = simpleProject();
+    p.costLines = [{ id: 'h', category: 'INFRASTRUCTURE', name: 'Hosting', componentKey: 'hosting', basis: 'fixed_monthly', unitCost: 30, currency: 'CHF', unitLabel: 'month', quantity: 1, workflowId: null, workflowAllocation: 'by_attempted', scalesWithComplexity: false }];
+    const r = computeProject(p, cat, { packages: false });
+    expect(() => costWaterfall(p, cat, { volumeMultiplier: 1.2 })).not.toThrow();
+    expect(() => findOptimizations(p, cat)).not.toThrow();
+    expect(() => breakEven(p, cat, r.priceBook)).not.toThrow();
+  });
+});

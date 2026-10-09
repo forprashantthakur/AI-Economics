@@ -107,7 +107,7 @@ export function ImplementationTab({ project, result, update, canEdit }: EditorPr
             <Num value={plan.hoursPerDay} min={1} max={24} disabled={ro} ariaLabel="Hours per day" onChange={(v) => update('Changed hours per day', (d) => void (d.implementation.hoursPerDay = v))} />
           </Field>
           <Field label="Pricing method" className="col-span-2">
-            <div className={cx(ro && 'pointer-events-none opacity-60')}>
+            <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
               <Segmented
                 ariaLabel="Pricing method"
                 value={plan.pricingMethod}

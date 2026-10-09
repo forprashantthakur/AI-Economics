@@ -254,7 +254,7 @@ export function HumanReviewPanel({ wf, setWf, ro, catalog, hours, cost, cur }: {
           </div>
         </Field>
         <Field label="Borne by" hint={hr.borneBy === 'provider' ? 'Provider cost, priced into the ABU.' : 'Client staff time, not a provider cost.'}>
-          <div className={cx(ro && 'pointer-events-none opacity-60')}>
+          <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
             <Segmented
               ariaLabel="Review borne by"
               value={hr.borneBy}

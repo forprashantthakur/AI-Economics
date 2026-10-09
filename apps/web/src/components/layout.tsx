@@ -22,6 +22,7 @@ import { ROLES, ROLE_LABELS, type RoleName } from '@aies/engine';
 import { href, type Route } from '../lib/router';
 import { useCurrentProject, useResult, useStore } from '../state/store';
 import { cx } from './ui';
+import { ServerSync } from './ServerSync';
 
 const NAV: { route: Route; label: string; icon: typeof LayoutDashboard; group: 'top' | 'project' | 'bottom' }[] = [
   { route: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'top' },
@@ -175,7 +176,14 @@ export function TopBar({ route, onMenu }: { route: Route; onMenu: () => void }) 
         <label htmlFor="role-switch" className="sr-only">
           Role
         </label>
-        <select id="role-switch" className="field !w-auto text-[13px]" value={state.user.role} onChange={(e) => dispatch({ type: 'setRole', role: e.target.value as RoleName })} title="Role (controls what you can edit)">
+        <select
+          id="role-switch"
+          className="field !w-auto text-[13px] hidden sm:block"
+          value={state.user.role}
+          disabled={!!state.server}
+          onChange={(e) => dispatch({ type: 'setRole', role: e.target.value as RoleName })}
+          title={state.server ? `Role of ${state.server.user.email}, set on the server` : 'Demo role (controls what you can edit)'}
+        >
           {ROLES.map((r) => (
             <option key={r} value={r}>
               {ROLE_LABELS[r]}
@@ -198,6 +206,7 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
       <Sidebar route={route} open={open} onClose={() => setOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar route={route} onMenu={() => setOpen(true)} />
+        <ServerSync />
         <main id="main" className="flex-1 min-w-0 px-4 lg:px-7 py-6 max-w-[1480px] w-full mx-auto">
           {children}
         </main>

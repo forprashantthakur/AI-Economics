@@ -160,7 +160,7 @@ export function AcuCalculator() {
         />
 
         <Panel title="Measurement method" description="Both methods are computed every time so you can see how the meter would move. The selected method drives ACU counts, the ACU price and billing.">
-          <div className={cx('mb-3', ro && 'pointer-events-none opacity-60')}>
+          <div className={cx('mb-3', ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
             <Segmented<AcuMethod>
               ariaLabel="ACU measurement method"
               value={cfg.method}
@@ -176,7 +176,7 @@ export function AcuCalculator() {
             {methodBox(
               'cost_normalized',
               acu.methodA,
-              `1 ACU = ${money(cfg.referenceValue, cfg.referenceCurrency, 2)} of eligible AI consumption cost at base-year prices. Tracks cost closely; counts move when unit costs change in later years only through volume.`,
+              `1 ACU = ${money(cfg.referenceValue, cfg.referenceCurrency, 2)} of eligible AI consumption cost at base-year prices. Tracks cost closely. Because later years are measured at base-year prices, ACU counts change with consumption, not with supplier price changes.`,
             )}
             {methodBox(
               'weighted_resource',

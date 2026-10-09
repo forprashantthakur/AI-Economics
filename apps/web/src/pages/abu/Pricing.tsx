@@ -45,7 +45,7 @@ export function AbuPricingControls({
       <ReadOnlyNote show={ro} what="edit the ABU rate card" />
       <div className="space-y-4">
         <Field label="Cost of failed, retried and rejected work">
-          <div className={cx(ro && 'pointer-events-none opacity-60')}>
+          <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
             <Segmented
               ariaLabel="Failed cost allocation"
               value={rc.failedCostAllocation}
@@ -84,7 +84,7 @@ export function AbuPricingControls({
             />
           </Field>
           <Field label="Class pricing" hint={rc.classPricing === 'weighted' ? 'Class price = ABU price × class weight.' : 'Class price overrides from the complexity table, where set.'}>
-            <div className={cx(ro && 'pointer-events-none opacity-60')}>
+            <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
               <Segmented
                 ariaLabel="Class pricing"
                 value={rc.classPricing}
@@ -116,7 +116,7 @@ export function AbuPricingControls({
             <Num value={rc.minMonthlyAbus} min={0} step={1000} disabled={ro} ariaLabel="Minimum weighted ABUs per month" onChange={(v) => set('Changed minimum monthly ABUs', (r) => (r.minMonthlyAbus = v))} />
           </Field>
           <Field label="Tier mode" hint={rc.tierMode === 'graduated' ? 'Each band is priced at its own discount.' : 'All ABUs take the discount of the highest band reached.'}>
-            <div className={cx(ro && 'pointer-events-none opacity-60')}>
+            <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
               <Segmented
                 ariaLabel="ABU tier mode"
                 value={rc.tierMode}

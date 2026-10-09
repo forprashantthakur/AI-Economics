@@ -4,7 +4,7 @@ import { PROVIDER_TIER_MAP, safeDiv, type Catalog, type ProcessTemplate, type Pr
 import { Badge, Button, Callout, Field, IssueList, KeyValues, Select, StatStrip, TextArea, TextInput, Toggle, cx } from '../../components/ui';
 import { compact, count, num, pct, periodLabel, unitPrice } from '../../lib/format';
 import { AVAILABILITY_SLAS, CLOUD_PLATFORMS, DEFAULT_FUNCTIONS, DEFAULT_INDUSTRIES, ENGAGEMENT_TYPES, FieldError, GEOGRAPHIES, MonthInput, NumberInput, SOLUTION_LABEL, SOLUTION_TYPES, SUPPORT_SLAS, SuggestInput, TEMPLATE_GROUPS, TagInput, templateGroup, withCurrent } from '../projects/common';
-import { STEPS, type Errors, type WizardForm } from './form';
+import { STEPS, callProfile, type Errors, type WizardForm } from './form';
 
 export interface StepProps {
   form: WizardForm;
@@ -241,7 +241,7 @@ export function SolutionStep({ form, set, errors, catalog }: StepProps & { catal
 
 export function WorkloadStep({ form, set, errors, template, preview }: StepProps & { template?: ProcessTemplate; preview?: Project }) {
   const wf = preview?.workflows[0];
-  const modelCalls = wf ? wf.llmSteps.reduce((a, s) => a + s.callsPerExecution, 0) : 0;
+  const prof = wf ? callProfile(wf.llmSteps) : { calls: 0, avgInput: 0, avgOutput: 0 };
   const estPeak = preview?.solution.peakConcurrency;
   const auto = form.peakConcurrency === null;
   const unit = template?.abuName ?? 'transaction';
@@ -286,14 +286,20 @@ export function WorkloadStep({ form, set, errors, template, preview }: StepProps
             <NumberInput id="w-steps" value={form.workflowSteps} min={1} max={500} onChange={(v) => set('workflowSteps', Math.round(v))} />
             <FieldError>{errors.workflowSteps}</FieldError>
           </Field>
-          <Field label="Model calls per transaction" hint={`From the template's ${wf?.llmSteps.length ?? 0} LLM steps. Edit steps in Project Costing after creation.`}>
-            <div className="field num text-right bg-sunken text-ink-2">{num(modelCalls, modelCalls % 1 ? 2 : 0)}</div>
+          <Field label="Model calls per transaction" htmlFor="w-calls" hint={`Across the template's ${wf?.llmSteps.length ?? 0} LLM steps; each step keeps its share. Fine-tune steps in Project Costing.`}>
+            <NumberInput id="w-calls" value={Math.round((form.modelCallsPerTxn ?? prof.calls) * 100) / 100} min={0.1} max={500} step={0.5} onChange={(v) => set('modelCallsPerTxn', v)} />
+          </Field>
+          <Field label="Input tokens per model call" htmlFor="w-in" hint="Average across calls, including retrieved context. Cacheable prefixes scale with it.">
+            <NumberInput id="w-in" value={Math.round(form.avgInputTokens ?? prof.avgInput)} min={1} max={2000000} step={100} onChange={(v) => set('avgInputTokens', Math.round(v))} />
+          </Field>
+          <Field label="Output tokens per model call" htmlFor="w-out" hint="Average across calls. Reasoning tokens scale with it.">
+            <NumberInput id="w-out" value={Math.round(form.avgOutputTokens ?? prof.avgOutput)} min={1} max={200000} step={50} onChange={(v) => set('avgOutputTokens', Math.round(v))} />
           </Field>
           <Field label="Tool calls per transaction" htmlFor="w-tools" hint={template ? `Template: ${template.toolCallsPerExecution}.` : undefined}>
             <NumberInput id="w-tools" value={form.toolCallsPerExecution} min={0} max={500} onChange={(v) => set('toolCallsPerExecution', v)} />
             <FieldError>{errors.toolCallsPerExecution}</FieldError>
           </Field>
-          <Field label="Token multiplier" htmlFor="w-tok" hint="Scales the template's tokens per call (1 = as designed; 1.3 = longer documents or prompts).">
+          <Field label="Token multiplier" htmlFor="w-tok" hint="Scales the template's tokens per call (1.3 = longer documents). Set the averages above instead for exact figures.">
             <NumberInput id="w-tok" value={form.tokenMultiplier} min={0.05} max={20} step={0.1} suffix="×" onChange={(v) => set('tokenMultiplier', v)} />
             <FieldError>{errors.tokenMultiplier}</FieldError>
           </Field>

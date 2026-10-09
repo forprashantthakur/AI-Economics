@@ -116,7 +116,7 @@ export interface RunSnapshot {
   costLines: CostLineResult[];
   humanReviewByWorkflow: Record<string, Decimal>;
   humanReviewHoursByWorkflow: Record<string, Decimal>;
-  /** Hours of client staff time spent on review when review is client-borne (non-cash, used by value model). */
+  /** Hours of client staff time reviewing assisted completions when review is client-borne (rejected work is a manual redo, counted in the value model). */
   clientReviewHoursByWorkflow: Record<string, Decimal>;
   pools: Record<CostPool, Decimal>;
   /** Pools at base-year (reference) prices — used for cost-normalised ACU measurement. */
@@ -371,7 +371,8 @@ export function buildSnapshot(project: Project, catalog: Catalog, params: Snapsh
     } else {
       humanReviewByWorkflow[wf.id] = ZERO;
       humanReviewHoursByWorkflow[wf.id] = ZERO;
-      clientReviewHoursByWorkflow[wf.id] = assistedHours.plus(reworkHours);
+      // Client staff review assisted completions; rejected work is redone manually and counted in the value model.
+      clientReviewHoursByWorkflow[wf.id] = assistedHours;
       reworkCostByWorkflow[wf.id] = ZERO;
     }
   }

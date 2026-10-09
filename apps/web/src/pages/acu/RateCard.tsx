@@ -172,7 +172,7 @@ export function AcuRateCardPanel({ project, result, update, stream, steadyRevenu
             />
           </Field>
           <Field label="Tier mode" hint={rc.tierMode === 'graduated' ? 'Each band is priced at its own discount.' : 'All units take the discount of the highest band reached.'}>
-            <div className={cx(ro && 'pointer-events-none opacity-60')}>
+            <div className={cx(ro && 'pointer-events-none opacity-60')} inert={ro || undefined}>
               <Segmented
                 ariaLabel="ACU tier mode"
                 value={rc.tierMode}

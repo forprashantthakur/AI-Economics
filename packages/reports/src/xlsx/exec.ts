@@ -187,7 +187,7 @@ export function buildExec(w: WB): void {
     w.calc(sh, r, LH.col.rh, `${w.at(`abu.${i}.rej`, sh)}*${A('minR')}/60`, 'count2');
     w.calc(sh, r, LH.col.cost, `IF(${x('borne')}="provider",(${x('ah')}+${x('rh')})*${x('rate')},0)`, 'money2');
     w.calc(sh, r, LH.col.rw, `IF(${x('borne')}="provider",${x('rh')}*${x('rate')},0)`, 'money2');
-    w.calc(sh, r, LH.col.ch, `IF(${x('borne')}="provider",0,${x('ah')}+${x('rh')})`, 'count2');
+    w.calc(sh, r, LH.col.ch, `IF(${x('borne')}="provider",0,${x('ah')})`, 'count2');
     w.check(sh, r, LH.col.cost, b.humanReviewByWorkflow[wf.id] ?? 0, 'Execution costs', `${wf.name} — human review cost`, 'money2');
     w.check(sh, r, LH.col.ch, b.clientReviewHoursByWorkflow[wf.id] ?? 0, 'Execution costs', `${wf.name} — client review hours`, 'count2');
     w.put(`hr.${i}.cost`, sh, r, LH.col.cost);

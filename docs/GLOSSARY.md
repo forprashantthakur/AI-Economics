@@ -78,9 +78,9 @@ In every case, uncached + cache read + cache write = input tokens.
 
 **Steady state.** A fully ramped month in contract year 1 at base volume, billed at year-1 prices, with every benefit line fully ramped. It supplies MRR, ARR, steady margin and cost-to-serve.
 
-**Target margin.** Gross margin a price is set to achieve: price = cost ÷ (1 − margin).
+**Target margin.** Gross margin a price is set to achieve: price = cost ÷ (1 − margin). Margins of 100% or more are applied as 99% and reported as an error.
 
-**Margin floor.** The minimum margin on unit cost. ACU and ABU prices (including negotiated overrides) are raised to it when the price book is built. It is also applied inside ACU tier billing, but not inside ABU tier billing.
+**Margin floor.** The minimum margin on unit cost. ACU and ABU prices (including negotiated overrides) are raised to it when the price book is built. Volume-tier discounts cannot take a unit below it: ACU tiers use the ACU floor price and ABU tiers use the blended floor across workflows.
 
 **Volume tier.** A discount that applies above a monthly unit threshold.
 
@@ -127,11 +127,11 @@ In every case, uncached + cache read + cache write = input tokens.
 
 **Ramp.** The go-live volume build-up: volume starts at a set percentage and rises linearly to 100% over the ramp months.
 
-**Break-even volume.** The monthly volume at which steady-state gross profit is zero at locked prices. It is reported as "below" when the project is profitable at any volume.
+**Break-even volume.** The lowest monthly volume above which steady-state gross profit stays non-negative at locked prices. It is reported as "below" when the project is profitable at every volume tested, for example because a minimum commitment covers fixed cost.
 
 ## Value and ROI
 
-**Productivity value.** Client hours saved × loaded hourly cost. It is non-cash and is reported but **not** counted as a financial benefit. Hours saved = hours before AI − hours after AI. Hours after include spot checks, client-borne review, and manual rework of failed and rejected transactions.
+**Productivity value.** Client hours saved × loaded hourly cost. It is non-cash and is reported but **not** counted as a financial benefit. Hours saved = hours before AI − hours after AI. Hours after include spot checks, client-borne review of human-assisted completions, and a full manual redo of each failed or rejected transaction.
 
 **FTE released.** Hours saved ÷ productive hours per FTE per month.
 

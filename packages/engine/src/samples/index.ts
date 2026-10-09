@@ -215,10 +215,6 @@ function rfpResponse(catalog: Catalog): Project {
     { id: 's-acu', type: 'acu', label: 'ACU consumption', enabled: true, recovers: ['LLM', 'ORCHESTRATION', 'RAG', 'DOCUMENT'], targetMarginPct: 40, discountPct: 0 },
   ];
   p.pricing.subscription = { includedUnit: 'acu', includedQty: 200000, includedDiscountPct: 5, overagePremiumPct: 15 };
-  p.pricing.acuRateCard.tiers = [
-    { fromUnits: 300000, discountPct: 5 },
-    { fromUnits: 600000, discountPct: 10 },
-  ];
   p.value.benefits = [
     { id: 'rfp-b1', name: 'Reduced external bid-writing agency spend', category: 'hard_savings', annualAmount: 24_000_000, currency: 'INR', startMonth: 2, rampMonths: 4, confidencePct: 85, status: 'finance_validated', validatedBy: 'M. Shah (Sales Finance)', validatedOn: '2026-09-10', scalesWithVolume: false },
     { id: 'rfp-b2', name: 'Avoided bid-team expansion (8 FTE)', category: 'cost_avoidance', annualAmount: 24_000_000, currency: 'INR', startMonth: 7, rampMonths: 6, confidencePct: 80, status: 'finance_validated', validatedBy: 'M. Shah (Sales Finance)', validatedOn: '2026-09-10', overlapGroup: 'rfp-capacity', scalesWithVolume: false },

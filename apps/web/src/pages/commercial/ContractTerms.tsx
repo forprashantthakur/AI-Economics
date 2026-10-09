@@ -44,7 +44,7 @@ export function SubscriptionPanel({ r, update, canEdit }: { r: ProjectResult; up
     <Panel title="Subscription and committed capacity" description="A platform fee plus an optional allowance of included units; usage above the allowance is billed as overage.">
       <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
         <Field label="Included unit">
-          <div className={canEdit ? '' : 'opacity-50 pointer-events-none'} aria-disabled={!canEdit}>
+          <div className={canEdit ? '' : 'opacity-50 pointer-events-none'} aria-disabled={!canEdit} inert={!canEdit || undefined}>
             <Segmented<SubscriptionConfig['includedUnit']>
               ariaLabel="Included unit"
               value={sub.includedUnit}

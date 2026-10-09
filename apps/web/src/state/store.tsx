@@ -5,7 +5,9 @@
  * URL is configured, lib/api.ts syncs the same objects to the server.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react';
+import type { ServerSession } from '../lib/api';
 import {
+  PERMISSIONS,
   can,
   computeProject,
   defaultCatalog,
@@ -40,6 +42,10 @@ export interface AppState {
   user: { name: string; email: string; role: RoleName };
   audit: AuditEntry[];
   theme: 'system' | 'light' | 'dark';
+  /** Set when the workspace is connected to the API server (PostgreSQL storage, server RBAC and audit). */
+  server?: ServerSession | null;
+  /** Server version of each project, used for optimistic concurrency on save. */
+  serverVersions?: Record<string, number>;
 }
 
 const STORAGE_KEY = 'aies.state.v1';
@@ -96,7 +102,11 @@ type Action =
   | { type: 'setTheme'; theme: AppState['theme'] }
   | { type: 'setTemplates'; templates: ProcessTemplate[]; action: string }
   | { type: 'setLists'; industries: string[]; functions: string[] }
-  | { type: 'audit'; action: string; detail: string; projectId: string | null };
+  | { type: 'audit'; action: string; detail: string; projectId: string | null }
+  | { type: 'connect'; session: ServerSession; projects: Project[]; versions: Record<string, number>; catalog: Catalog }
+  | { type: 'disconnect' }
+  | { type: 'serverVersion'; id: string; version: number }
+  | { type: 'serverProject'; project: Project; version: number; note: string };
 
 let seq = 0;
 const entry = (s: AppState, action: string, detail: string, projectId: string | null): AuditEntry => ({
@@ -128,7 +138,30 @@ function reducer(s: AppState, a: Action): AppState {
     case 'updateCatalog':
       return { ...s, catalog: a.catalog, audit: log(a.action, a.detail, null) };
     case 'setRole':
+      if (s.server) return s; // the server decides the role of a signed-in user
       return { ...s, user: { ...s.user, role: a.role }, audit: log('Switched role', a.role, null) };
+    case 'connect':
+      return {
+        ...s,
+        server: a.session,
+        serverVersions: a.versions,
+        projects: a.projects,
+        catalog: a.catalog,
+        currentProjectId: a.projects.some((p) => p.id === s.currentProjectId) ? s.currentProjectId : a.projects[0]?.id ?? '',
+        user: { name: a.session.user.name, email: a.session.user.email, role: a.session.user.role },
+        audit: log('Connected to server', `${a.session.user.email} at ${a.session.url || 'this site'}`, null),
+      };
+    case 'disconnect':
+      return { ...s, server: null, serverVersions: {}, audit: log('Disconnected from server', 'Working in this browser only', null) };
+    case 'serverVersion':
+      return { ...s, serverVersions: { ...(s.serverVersions ?? {}), [a.id]: a.version } };
+    case 'serverProject':
+      return {
+        ...s,
+        projects: s.projects.some((p) => p.id === a.project.id) ? s.projects.map((p) => (p.id === a.project.id ? a.project : p)) : [...s.projects, a.project],
+        serverVersions: { ...(s.serverVersions ?? {}), [a.project.id]: a.version },
+        audit: log(a.note, a.project.name, a.project.id),
+      };
     case 'setUser':
       return { ...s, user: { ...s.user, name: a.name, email: a.email } };
     case 'setTheme':
@@ -176,6 +209,11 @@ export function useStore(): Store {
   return s;
 }
 
+/** A role with no edit permission at all (e.g. Business Leader) can never change a project. */
+export function isReadOnlyRole(role: RoleName): boolean {
+  return !PERMISSIONS.some((p) => p !== 'report.export' && p !== 'audit.view' && can(role, p));
+}
+
 export function useCan(permission: Permission): boolean {
   const { state } = useStore();
   return can(state.user.role, permission);
@@ -200,7 +238,7 @@ export function useProjectUpdater(projectId: string | undefined) {
   return useCallback(
     (action: string, mutate: (draft: Project) => void, detail = '') => {
       const p = state.projects.find((x) => x.id === projectId);
-      if (!p) return;
+      if (!p || isReadOnlyRole(state.user.role)) return;
       const draft = structuredClone(p);
       mutate(draft);
       draft.updatedAt = new Date().toISOString();

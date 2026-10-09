@@ -224,15 +224,16 @@ export function Tabs<T extends string>({ tabs, value, onChange, className }: { t
   );
 }
 
-export function Segmented<T extends string>({ options, value, onChange, size = 'md', ariaLabel }: { options: { id: T; label: ReactNode }[]; value: T; onChange: (v: T) => void; size?: 'sm' | 'md'; ariaLabel?: string }) {
+export function Segmented<T extends string>({ options, value, onChange, size = 'md', ariaLabel, disabled }: { options: { id: T; label: ReactNode }[]; value: T; onChange: (v: T) => void; size?: 'sm' | 'md'; ariaLabel?: string; disabled?: boolean }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex rounded-md border border-line bg-sunken p-0.5">
+    <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined} className={cx('inline-flex rounded-md border border-line bg-sunken p-0.5', disabled && 'opacity-60')}>
       {options.map((o) => (
         <button
           key={o.id}
           type="button"
           role="radio"
           aria-checked={value === o.id}
+          disabled={disabled}
           onClick={() => onChange(o.id)}
           className={cx(
             'rounded-[5px] font-semibold whitespace-nowrap transition-colors',

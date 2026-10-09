@@ -10,7 +10,7 @@ import type { Catalog, ModelRoute, Project, ScenarioOverrides } from './types';
 import { buildSnapshot } from './model';
 import { computeValueMonth } from './value';
 import { revenueForMonth, type PriceBook } from './pricing';
-import { computeProject, type ProjectResult } from './compute';
+import { computeProject, withFxFallback, type ProjectResult } from './compute';
 
 export const SCENARIO_PRESETS: Record<'baseline' | 'optimized' | 'stress', { name: string; description: string; overrides: ScenarioOverrides }> = {
   baseline: { name: 'Baseline', description: 'Assumptions as estimated.', overrides: {} },
@@ -127,7 +127,8 @@ export interface BreakEven {
   status: 'found' | 'below' | 'above';
 }
 
-export function steadyGrossProfit(project: Project, catalog: Catalog, book: PriceBook, k: number, baselineAttempted: Decimal): Decimal {
+export function steadyGrossProfit(project: Project, inputCatalog: Catalog, book: PriceBook, k: number, baselineAttempted: Decimal): Decimal {
+  const catalog = withFxFallback(project, inputCatalog);
   const p = k === 1 ? project : applyScenario(project, { volumeMultiplier: k });
   const snap = buildSnapshot(p, catalog, { rampFactor: 1, yearIndex: 0 });
   const val = computeValueMonth(p, catalog, snap, 'steady', baselineAttempted);
@@ -219,7 +220,8 @@ export interface WaterfallStep {
 }
 
 /** Sequential attribution of the change in steady-state monthly run cost to each driver group. */
-export function costWaterfall(project: Project, catalog: Catalog, o: ScenarioOverrides): WaterfallStep[] {
+export function costWaterfall(project: Project, inputCatalog: Catalog, o: ScenarioOverrides): WaterfallStep[] {
+  const catalog = withFxFallback(project, inputCatalog);
   const groups: { label: string; keys: (keyof ScenarioOverrides)[] }[] = [
     { label: 'Volume', keys: ['volumeMultiplier'] },
     { label: 'Token consumption', keys: ['inputTokenMultiplier', 'outputTokenMultiplier'] },

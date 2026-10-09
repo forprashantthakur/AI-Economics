@@ -50,10 +50,13 @@ Shared helpers used throughout this document:
 
 ```
 pct(v)                  = v / 100
-priceForMargin(c, m)    = c / (1 − m/100)        (throws if m ≥ 100)
-marginPct(rev, cost)    = (rev − cost) / rev × 100   (0 when rev = 0)
+priceForMargin(c, m)    = c / (1 − m/100)                    (throws if m ≥ 100)
+priceAtMargin(c, m)     = priceForMargin(c, min(m, 99))      (MAX_MARGIN_PCT = 99)
+marginPct(rev, cost)    = (rev − cost) / rev × 100           (0 when rev = 0)
 compound(r, n)          = (1 + r/100)^n
 ```
+
+Every engine price calculation (implementation, ACU, ABU, fees, subscription allowances, margin floors) uses `priceAtMargin()`. A target margin or margin floor of 100% or more is therefore applied as 99% instead of failing the calculation, and validation reports it as a `MARGIN_RANGE` error ([section 17](#17-validation-and-double-count-detection)).
 
 **Where JavaScript numbers still appear.** These values pass through binary floating point before being lifted into `Decimal`. None of them is a money amount, but they do feed money calculations:
 
@@ -122,7 +125,17 @@ The FX table has one base currency, and each rate is "units of currency per 1 un
 convert(amount, from, to) = amount / rate[from] × rate[to]
 ```
 
-The base currency is treated as rate 1 even if it is missing from the table. A missing or non-positive rate throws `FxError`. Because cross rates are derived through the base, A → B → A round-trips exactly up to decimal precision; the tests check this. One FX table applies to the whole contract term, so the projection has no FX movement.
+The base currency is treated as rate 1 even if it is missing from the table. Called directly, `convert()` throws `FxError` for a missing or non-positive rate. Because cross rates are derived through the base, A → B → A round-trips exactly up to decimal precision; the tests check this. One FX table applies to the whole contract term, so the projection has no FX movement.
+
+**Missing rates.** `validate.ts › currenciesUsed()` collects every currency the project refers to:
+
+- the project and ACU reference currencies
+- the routed models and linked price items
+- cost lines, roles and direct expenses
+- human review, productivity, benefits and client costs
+- actuals
+
+Before calculating, `compute.ts › withFxFallback()` gives any of these that has no FX rate a rate of 1, so it is treated 1:1 with the base currency and the calculation completes. `validateProject()` reports each one as an `FX_MISSING` error, so the figures should not be used until the rate is added. The fallback applies inside `computeProject()` and therefore also inside `runScenario()` and `sensitivity()`. It does not apply to `costWaterfall()`, `findOptimizations()` or `breakEven()`, which still throw `FxError` ([section 20](#20-known-limitations-and-modelling-assumptions)).
 
 The sample table (`catalog/index.ts › SAMPLE_FX`, as of 2026-09-30, illustrative) uses USD as the base: INR 88, EUR 0.86, GBP 0.75, AUD 1.52, SGD 1.30, AED 3.6725, JPY 148.
 
@@ -142,9 +155,11 @@ All three step once a year; none compounds monthly. The sample projects use 4% c
 
 `compute.ts › computeProject()`:
 
+0. **FX fallback.** `withFxFallback()` adds a temporary 1:1 rate for any currency the project uses that has no rate ([2.1](#21-currency-conversion)). Validation still runs against the original catalogue.
 1. **Implementation estimate.** `computeImplementation()` produces labour, expenses, contingency, total cost, price and schedule ([section 9](#9-implementation-estimate)).
 2. **Projection context.** `buildContext()`:
    - builds the **baseline snapshot**: one month at ramp 1 in contract year 1 (`rampFactor = 1`, `yearIndex = 0`)
+   - sets the volume base for volume-scaled benefits: `opts.benefitVolumeBase` if supplied (scenarios pass the original project's volume), otherwise the baseline's attempted volume
    - computes the steady-state value month
    - builds one snapshot for every month 0…T. Snapshots are cached by `(rampFactor, yearIndex)`, so identical months share one calculation.
 3. **Marginal costs.** `marginalCosts()` builds a second snapshot at `rampFactor = 1.01` and divides the change in run cost by the change in ACUs and in weighted ABUs.
@@ -367,7 +382,11 @@ Source: `llm.ts › contextUtilizationPct()`.
 utilisation% = (inputTokensPerCall + outputTokensPerCall + reasoningTokensPerCall) / contextWindow × 100
 ```
 
-The snapshot reports this for each LLM line using the mix-scaled tokens. Validation (`CONTEXT_WINDOW`, warning above 90%) uses the unscaled step tokens instead.
+The snapshot reports this for each LLM line using the mix-average tokens. Validation (`CONTEXT_WINDOW`, warning above 90%) checks the most complex transactions instead. It multiplies the step's tokens by the workflow's highest class consumption multiplier (at least 1):
+
+```
+peakUtilisation% = (inputTokens + outputTokens + reasoningTokens) × max(1, max_c consumptionMultiplier_c) / contextWindow × 100
+```
 
 ### 5.9 Self-hosted model rates
 
@@ -496,12 +515,14 @@ reworkHours   = rejected × minutesPerRejectedTxn / 60
 rate          = convert(hourlyCost) × compound(costInflationPct, yearIndex)
 ```
 
-| `borneBy` | Provider cost (`HUMAN_REVIEW` pool) | Client time (used by the value model) |
+| `borneBy` | Provider cost (`HUMAN_REVIEW` pool) | Client time in the value model |
 |---|---|---|
 | `provider` (part of the managed service) | `(assistedHours + reworkHours) × rate` | Only the client's spot-check minutes on human-assisted transactions |
-| `client` (client staff do the review) | 0 | `assistedHours + reworkHours`, added to the client's after-AI hours |
+| `client` (client staff do the review) | 0 | `assistedHours` (review minutes on human-assisted completions), added to the client's after-AI hours |
 
-**How this avoids double counting with client productivity.** Review effort is costed once, either as a provider cost or as client time, never both. If the provider bears it, the cost is in the provider's run cost and the client's hours saved are not reduced by it. If the client bears it, there is no provider cost, and the hours reduce the client's productivity gain ([13.1](#131-productivity-hours-fte-and-value)). Validation raises `REVIEW_DOUBLE_COUNT` when provider-borne review exists and a cost line with component key `human_review` or `exception_handling` also exists.
+For client-borne review, the snapshot field `clientReviewHoursByWorkflow` reports `assistedHours + reworkHours`. The value model uses only `assistedHours`, because a rejected transaction is already counted once as a full manual redo ([13.1](#131-productivity-hours-fte-and-value)).
+
+**How this avoids double counting with client productivity.** Review effort is costed once, either as a provider cost or as client time, never both. If the provider bears it, the cost is in the provider's run cost and the client's hours saved are not reduced by it. If the client bears it, there is no provider cost, and the hours reduce the client's productivity gain. Validation raises `REVIEW_DOUBLE_COUNT` when provider-borne review exists and a cost line with component key `human_review` or `exception_handling` also exists.
 
 AP example (provider-borne, 6 minutes per assisted transaction, 8 minutes per rejected one, INR 500/hour):
 
@@ -787,7 +808,7 @@ The price book is re-derived only when the project is recalculated, or when a sc
 
 ### 10.4 Fixed implementation fee
 
-- **Default** (`useImplementationPlanPrice` not `false`): the fee is the implementation plan's quoted price, `impl.price`. The plan's pricing method, margin and discount are the single source of truth, and **the stream's own `targetMarginPct` and `discountPct` are not used**.
+- **Default** (`useImplementationPlanPrice` not `false`): the fee is the implementation plan's quoted price, `impl.price`. The plan's pricing method, margin and discount are the single source of truth, so the stream's own `targetMarginPct` and `discountPct` inputs are not used. The price book reports the plan's **achieved** margin (`impl.marginPct`) as the stream's `targetMarginPct`, so the stream shows the margin actually priced: 32% in all three samples.
 - **Otherwise:** `fee = implementation totalCost / (1 − stream margin) × (1 − stream discount)`.
 
 The fee is billed in month 0 only.
@@ -848,18 +869,27 @@ price_w           = max(price_w, floorPrice_w)       (raises ABU_FLOOR when appl
 
 Reconciliation check `abu-recovery` confirms that Σ (recovered_w + failure_w) equals the stream's recovered cost.
 
-**Blended price.** The blended price is the revenue at the pricing basis divided by total weighted ABUs. It prices minimum-commitment shortfalls and subscription allowances.
+**Blended price and blended floor.**
+
+```
+blendedPrice = revenue at the pricing basis / total weighted ABUs
+blendedFloor = Σ_w (floorPrice_w × billableUnits_w) / total weighted ABUs
+```
+
+The blended price prices minimum-commitment shortfalls and subscription allowances. The blended floor is the lowest blended rate that ABU tier discounts may reach.
+
+`ZERO_ABU` warns when the ABU stream has cost to recover but no weighted ABUs are measured at the pricing basis. In that case the per-ABU price and the blended price are 0, so minimum commitments also bill nothing.
 
 **Monthly billing** (when the ABU stream is not billing subscription overage):
 
 ```
 raw    = Σ_w Σ_c (autonomous_c × classPrice + humanAssisted_c × assistedPrice) × esc
-billed = tieredCharge(totalWeightedABUs, raw / totalWeightedABUs, tiers, tierMode)    if tiers exist
-       = raw                                                                         otherwise
-shortfall line = (minMonthlyAbus − totalWeightedABUs) × blendedPrice × esc           if positive
+billed = tieredCharge(totalWeightedABUs, raw / totalWeightedABUs, tiers, tierMode, blendedFloor × esc)   if tiers exist
+       = raw                                                                                          otherwise
+shortfall line = (minMonthlyAbus − totalWeightedABUs) × blendedPrice × esc                            if positive
 ```
 
-ABU tiers are applied to the blended rate across all workflows. No margin floor is passed into this tier step. The ABU minimum commitment is a **quantity** of weighted ABUs; the ACU commitment is a money amount.
+ABU tiers are applied to the blended rate across all workflows, and no tier band can price below the escalated blended floor. The ABU minimum commitment is a **quantity** of weighted ABUs; the ACU commitment is a money amount.
 
 ### 10.7 Worked example: AP ABU price
 
@@ -871,7 +901,7 @@ The AP model has one ABU stream recovering all run pools at a 35% target margin 
 | Weighted ABUs = billable units (factor 1) | 61,546.50 |
 | Cost per ABU | 24.596222 |
 | List price = 1,513,811.40 / 0.65 / 61,546.50 | **37.840342** |
-| Floor = 24.596222 / 0.85 | 28.936732 (not applied) |
+| Floor = 24.596222 / 0.85 (also the blended floor, one workflow) | 28.936732 (not applied) |
 | Class prices: Simple / Medium / Complex | 37.8403 / 56.7605 / 113.5210 |
 | Revenue at the pricing basis before tiers | 2,328,940.61 (= 1,513,811.40 / 0.65) |
 | Billed after graduated tiers: 60,000 × 37.840342 + 1,546.5 × 37.840342 × 0.97 | **2,327,185.01** |
@@ -896,7 +926,11 @@ bandPrice(d) = max(price × (1 − d), floor)
 
 All-units tiers create a revenue cliff at each threshold. On the AP rate card, 60,000 ABUs bill INR 2,270,420.52 under either mode. One more ABU bills 2,270,457.23 under graduated tiers but **2,202,344.61** under all-units tiers.
 
-**Margin floors** stop a negotiated override, a discount or a tier from pricing below a minimum margin on unit cost. The floor is applied when the price book is built (ACU and ABU) and inside ACU tier billing. It is not applied inside ABU tier billing.
+**Margin floors** stop a negotiated override, a discount or a tier from pricing below a minimum margin on unit cost. The floor is applied in three places:
+
+- when the price book is built, to ACU and ABU prices
+- inside ACU tier billing, at the ACU floor price
+- inside ABU tier billing, at the blended floor ([10.6](#106-abu-price))
 
 ### 10.9 Subscription
 
@@ -915,8 +949,8 @@ overageRate        = allowanceUnitPrice × (1 + overagePremiumPct)
 ```
 
 - The allowance is billed every month under the unit stream's id as a commitment, even when usage is below it.
-- Overage is billed by the unit stream: `max(0, units − includedQty) × overageRate × esc`.
-- That stream's normal usage billing, tiers, minimum commitment, floor and class prices are **not** used in this mode.
+- Overage is billed by the unit stream at one flat rate: `max(0, units − includedQty) × overageRate × esc`.
+- By design, that stream's normal usage billing, volume tiers, minimum commitment, floor and per-class prices are **not** used in this mode. Volume tiers configured on its rate card have no effect while it bills subscription overage.
 
 **Without a matching unit stream** (raises the `SUB_NO_UNIT_STREAM` information issue):
 
@@ -1126,16 +1160,27 @@ Source: `productivityFor()`. The calculation is per workflow with a productivity
 
 ```
 hoursBefore   = attempted × manualMinutesBefore / 60
-assistedHours = client review hours (assisted + rework, section 6.5)    if review is client-borne
-              = humanAssisted × spotCheckMinutes / 60                   if provider-borne
-fallbackHours = (failed + rejected) × manualMinutesBefore / 60          (non-accepted work is redone manually)
+assistedHours = humanAssisted × minutesPerAssistedTxn × humanEffortMix / 60    if review is client-borne
+              = humanAssisted × spotCheckMinutes / 60                         if provider-borne
+fallbackHours = (failed + rejected) × manualMinutesBefore / 60                (non-accepted work is redone manually)
 hoursAfter    = autonomous × spotCheckMinutes / 60 + assistedHours + fallbackHours
 hoursSaved    = hoursBefore − hoursAfter
 fteReleased   = hoursSaved / productiveHoursPerFteMonth
 productivity  = hoursSaved × convert(loadedHourlyCost) × compound(costInflationPct, yearIndex)
 ```
 
-The value model is the only consumer of client-borne review hours, so they are never also a provider cost. Workflows without a productivity baseline raise `NO_PRODUCTIVITY`.
+Each rejected transaction is counted once, as a full manual redo in `fallbackHours`. Its review rework minutes are not added on top. Client-borne review hours are never also a provider cost. Workflows without a productivity baseline raise `NO_PRODUCTIVITY`.
+
+Client-borne example (Customer Service, "Customer query resolution", steady month):
+
+| Component | Calculation | Hours |
+|---|---|---:|
+| Before | 85,000 × 9 / 60 | 12,750.00 |
+| Autonomous spot checks | 62,532.8 × 0.3 / 60 | 312.66 |
+| Client review of assisted completions | 8,527.2 × 4 × 0.89 / 60 | 505.95 |
+| Manual redo of failed and rejected | (10,200 + 3,740) × 9 / 60 | 2,091.00 |
+| After | | 2,909.61 |
+| **Saved** | | **9,840.39** (77.18%) |
 
 AP (provider-borne review, 15 minutes manual, 0.5 minutes spot check, INR 450/hour, 140 productive hours per FTE-month):
 
@@ -1165,8 +1210,10 @@ gross_m = convert(annualAmount) / 12
 ramp_m      = 0                                       before startMonth
             = (m − startMonth + 1) / rampMonths       during the ramp (capped at 1)
             = 1                                       afterwards, or when rampMonths = 0
-volumeIndex = attempted_m / baseline attempted        (this includes the go-live ramp and growth)
+volumeIndex = attempted_m / volume base                (this includes the go-live ramp and growth)
 ```
+
+The volume base is the project's own steady-state attempted volume. A scenario instead passes the **original** project's volume (`ComputeOptions.benefitVolumeBase`), so volume-scaled benefits rise and fall with scenario volume ([14.2](#142-locked-or-repriced)).
 
 Benefits are 0 in month 0. The steady-state value month uses ramp = 1 for every line.
 
@@ -1291,6 +1338,8 @@ Source: `runScenario()`.
 - **Locked (default).** This is what a provider experiences under a signed contract. The base project's price book is reused, with the scenario's `priceMultiplier`, and only costs and volumes move.
 - **Repriced.** The scenario project is recalculated from scratch, deriving new prices at the target margin. Any price multiplier is applied afterwards.
 
+In both modes, `runScenario()` passes the base project's steady attempted volume as `benefitVolumeBase`. A volume multiplier of 0.8 therefore scales volume-linked benefit lines to 80%, while fixed-amount lines are unchanged.
+
 Scenario metrics (`metricsOf()`) include: monthly run cost, cost per ACU and per ABU, LLM cost per accepted transaction, steady revenue, ARR, year-1 revenue, steady and term margin, TCV, client ROI, payback, NPV and break-even.
 
 ### 14.3 Presets
@@ -1307,9 +1356,9 @@ AP results:
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Baseline | 1,513,811.40 | 24.5962 | 34.95% | 37.10% | 117,904,895.33 | 34.06% | 17.18 |
 | Optimized | 1,346,131.23 | 21.4161 | 43.33% | 43.66% | 119,866,207.57 | 31.99% | 17.53 |
-| Stress (locked) | 2,494,245.48 | 26.6286 | 28.55% | 31.27% | 165,205,467.34 | −2.73% | none within the term |
+| Stress (locked) | 2,494,245.48 | 26.6286 | 28.55% | 31.27% | 165,205,467.34 | 8.49% | 25.33 |
 
-Repricing the stress scenario raises the ABU price from 37.840342 to 40.967019 and restores a 34.00% steady margin.
+Under stress, the 40% volume increase also raises the volume-scaled benefits, so client ROI stays positive (8.49%, NPV INR 8,156,524.16) even though fees rise by 40%. Repricing the stress scenario raises the ABU price from 37.840342 to 40.967019, restores a 34.00% steady margin and lowers client ROI to 1.51%.
 
 ### 14.4 Cost waterfall
 
@@ -1366,7 +1415,7 @@ AP:
 | Driver | Low / high | Steady margin | Cost per ABU | Client ROI |
 |---|---|---|---|---|
 | Customer price | +10% / −10% | 40.86% / 27.72% | 24.596 / 24.596 | 22.51% / 48.02% |
-| Transaction volume | −20% / +20% | 27.78% / 39.47% | 27.329 / 22.774 | 57.12% / 17.02% |
+| Transaction volume | −20% / +20% | 27.78% / 39.47% | 27.329 / 22.774 | 48.05% / 23.77% |
 | Complexity mix | simpler / harder | 28.36% / 39.65% | 27.109 / 22.732 | 50.37% / 20.97% |
 | Human intervention | −5 pp / +5 pp | 39.75% / 30.15% | 22.781 / 26.411 | 34.06% / 34.06% |
 | AgentOps effort | −20% / +20% | 39.21% / 30.70% | 22.988 / 26.205 | 34.06% / 34.06% |
@@ -1377,7 +1426,7 @@ AP:
 | Cache hit rate | +15 pp / −15 pp | 35.47% / 34.43% | 24.400 / 24.793 | 34.06% / 34.06% |
 | Retry rate | ×0.5 / ×1.5 | 35.30% / 34.60% | 24.463 / 24.730 | 34.06% / 34.06% |
 
-Client ROI moves with volume, complexity and success rate because fees change while benefit lines do not ([section 20](#20-known-limitations-and-modelling-assumptions)).
+Client ROI moves with volume because all usage fees scale with volume, but only the volume-scaled benefit lines do. It moves with complexity and success rate because fees change while benefit lines do not depend on either ([section 20](#20-known-limitations-and-modelling-assumptions)).
 
 ### 14.6 Break-even volume
 
@@ -1387,11 +1436,16 @@ Source: `breakEven()`. This finds the volume multiplier `k` at which steady-stat
 grossProfit(k) = steady revenue(k) − steady run cost(k)
 ```
 
-1. If `grossProfit(0.0001) ≥ 0`, the status is `below`: the project is profitable at any volume because fixed fees or commitments cover cost.
-2. Otherwise the search range starts at [0.0001, 1] and doubles its upper bound while gross profit stays negative. Past 128× the status is `above`.
-3. Otherwise 40 bisection steps find `k`. The status is `found` and `monthlyVolume = base volume × k`.
+The search finds the lowest volume **above which gross profit stays non-negative**. A minimum commitment can make small volumes profitable while mid volumes lose money, so the search looks for the last loss, not the first profit:
 
-The AP sample returns `below`, because its 40,000-ABU minimum commitment covers fixed costs at any volume. Without the commitment, AP breaks even at **k = 0.4522, or 22,609 invoices a month**.
+1. Evaluate gross profit on a fixed grid of multipliers: 0.0001, 0.02, 0.05, 0.1, 0.2 … 0.9 (steps of 0.1), 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16, 32, 64, 128.
+2. If no grid point loses money, the status is `below`: the project is profitable at every volume tested, for example because fixed fees or commitments cover cost.
+3. If the last loss-making point is 128×, the status is `above`.
+4. Otherwise, 40 bisection steps between the last loss-making grid point and the next point find `k`. The status is `found` and `monthlyVolume = base volume × k`.
+
+The search covers only the grid points, so a loss between two profitable grid points is not detected. It returns `null` when the base volume is 0.
+
+All three samples return `below`. AP's 40,000-ABU minimum commitment covers its fixed costs at every grid volume. Without the commitment, AP breaks even at **k = 0.4522, or 22,609 invoices a month**.
 
 ---
 
@@ -1464,7 +1518,7 @@ Validation never throws; it returns a list of issues (`validate.ts › validateP
 
 | Code | Severity | Rule | Source |
 |---|---|---|---|
-| `FX_MISSING` | error | No FX rate for the reporting currency, or for any currency used by models, cost lines, roles, review, benefits, client costs or the ACU reference | `validate.ts` |
+| `FX_MISSING` | error | No FX rate for a currency the project uses (`currenciesUsed()`: reporting and ACU reference currencies, routed models, linked price items, cost lines, roles, direct expenses, review, productivity, benefits, client costs, actuals). `computeProject()` treats the currency as 1:1 with the base until the rate is added. | `validate.ts`, `compute.ts › withFxFallback()` |
 | `NO_WORKFLOWS` | warning | The project has no workflows, so no transactions, ACUs or ABUs | `validate.ts` |
 | `NEGATIVE_VOLUME` | error | A workflow's monthly volume is below 0 | `validate.ts` |
 | `RATE_RANGE` | error | Success, acceptance or human-intervention rate outside 0–100, or a negative retry rate | `validate.ts` |
@@ -1475,7 +1529,7 @@ Validation never throws; it returns a list of issues (`validate.ts › validateP
 | `ROUTING_NOT_100` | warning | Routing shares do not sum to 100 (±0.5); they are normalised | `validate.ts` |
 | `PREFIX_GT_INPUT` | info | Cacheable prefix is longer than the input; it is capped at the input | `validate.ts` |
 | `UNKNOWN_MODEL` | error | A step routes to a model that is not in the rate card | `validate.ts` |
-| `CONTEXT_WINDOW` | warning | Step tokens (unscaled) use more than 90% of the model's context window | `validate.ts` |
+| `CONTEXT_WINDOW` | warning | Step tokens × the workflow's highest class consumption multiplier use more than 90% of the model's context window | `validate.ts` |
 | `SAMPLE_RATES` | info | A routed model uses an illustrative sample rate | `validate.ts` |
 | `UNKNOWN_WORKFLOW` | error | A cost line is assigned to a workflow that does not exist | `validate.ts` |
 | `NEGATIVE_COST` | error | A cost line has a negative unit cost or quantity | `validate.ts` |
@@ -1490,7 +1544,8 @@ Validation never throws; it returns a list of issues (`validate.ts › validateP
 | `ACU_REFERENCE` | error | Method A reference value is 0 or less | `validate.ts` |
 | `ACU_IMPL` | info | Implementation is listed as an ACU-eligible pool and is excluded | `validate.ts` |
 | `UNKNOWN_ROLE` | warning | An activity has no valid role or rate | `validate.ts` |
-| `MARGIN_RANGE` | error | Implementation or stream target margin is 100% or more | `validate.ts` |
+| `MARGIN_RANGE` | error | The implementation target margin, an enabled stream's target margin, or the ACU or ABU rate-card margin floor is 100% or more. The engine applies 99% instead. | `validate.ts` |
+| `TERM` | error | Contract term is below 1 month; the projection treats it as 1 | `validate.ts` |
 | `FIXED_FEE_RUN_POOLS` | error | A one-time fee claims run pools | `validate.ts`, `pricing.ts` |
 | `SUB_NO_UNIT_STREAM` | info | The subscription includes units but no matching unit stream exists, so overage is at marginal cost + margin | `validate.ts` |
 | `MULTI_SUB` | error | More than one enabled subscription stream | `validate.ts` |
@@ -1502,6 +1557,7 @@ Validation never throws; it returns a list of issues (`validate.ts › validateP
 | `ACU_FLOOR` | warning | The ACU price was raised to the margin floor | `pricing.ts` |
 | `ZERO_ACU` | warning | No ACUs at the pricing basis, so an ACU price cannot recover cost | `pricing.ts` |
 | `ABU_FLOOR` | warning | A workflow's ABU price was raised to the margin floor | `pricing.ts` |
+| `ZERO_ABU` | warning | No weighted ABUs at the pricing basis, so a per-ABU price cannot recover cost and ABU minimum commitments bill nothing | `pricing.ts` |
 | `PASS_THROUGH_IMPL` | warning | A pass-through stream claims implementation | `pricing.ts` |
 | `MODEL` | warning | A snapshot warning: a step with no routing, a model not in the rate card, an unknown price item, an unknown workflow on a cost line, a derived ACU resource mapping, or a missing Method B weight set | `compute.ts` (from `model.ts`) |
 | `SCHEDULE` | error | A circular or unknown activity dependency | `compute.ts` (from `implementation.ts`) |
@@ -1576,43 +1632,41 @@ These follow from how the code works today. They should be considered when inter
 **Consumption and cost model**
 
 1. **Mix-weighted token scaling.** Tokens per call are multiplied by one mix-weighted average consumption multiplier; individual classes are not costed. All classes share the same calls per execution, cacheable prefix (which is not scaled), cache hit rate and funnel rates (success, acceptance, retry, human intervention). Class volumes are the accepted volume × share.
-2. **Context window checks use averages.** Snapshot utilisation uses mix-average tokens, and the `CONTEXT_WINDOW` validation uses unscaled step tokens. Neither checks the heaviest class, so a complex transaction (for example ×2.4 tokens in the RFP sample) could exceed a model's window without a warning.
+2. **Reported context utilisation is an average.** The utilisation reported on each LLM line uses mix-average tokens. Only the `CONTEXT_WINDOW` validation checks the most complex class ([5.8](#58-context-utilisation)).
 3. **Execution drivers differ by basis.** LLM consumption and `per_llm_call` lines use execution equivalents, which include partial retries and failures. `per_execution` lines and Method B tool calls and executions count every retry and failure in full.
 4. **Failure-cost fractions are approximations.** The LLM waste fraction `1 − accepted / executionEquivalents` assumes each accepted transaction consumed exactly one full execution.
 5. **Marginal cost** comes from a 1% volume increase at steady state. It is a linear approximation that excludes fixed costs.
 6. **Non-LLM cost is allocated to agents by LLM-cost share.** An agent's fully loaded cost includes a share of hosting, OCR, AgentOps and review in proportion to its LLM spend in each workflow. Agents with no LLM steps receive no cost.
 7. **Single FX table.** One set of rates applies for the whole term, so there is no FX movement in the projection.
-8. **Annual steps.** Growth, cost inflation, LLM price change and escalation change once a year (months 13 and 25), not monthly. The go-live ramp is linear and the same for every workflow.
+8. **The missing-FX fallback covers only some entry points.** `computeProject()`, and therefore `runScenario()` and `sensitivity()`, treat a currency with no rate as 1:1 with the base and report `FX_MISSING`. `costWaterfall()`, `findOptimizations()` and `breakEven()` call the cost model with the catalogue as given and still throw `FxError` for that currency.
+9. **Annual steps.** Growth, cost inflation, LLM price change and escalation change once a year (months 13 and 25), not monthly. The go-live ramp is linear and the same for every workflow.
 
 **Pricing**
 
-9. **Implementation cash in month 0.** The whole implementation cost and fee fall in month 0, with no milestone billing. The schedule's duration in weeks does not move go-live or the projection. Under time and materials the whole T&M value is also billed in month 0.
-10. **All-units tier cliffs.** Under `all_units`, crossing a threshold reprices every unit, so revenue can fall as volume rises (AP: 60,000 ABUs bill INR 2,270,420.52; 60,001 ABUs bill INR 2,202,344.61).
-11. **Prices are set at one pricing basis.** The steady contract-year-1 month is used, and prices do not account for tier discounts. AP's steady margin is therefore 34.95% against a 35% target.
-12. **Subscription overage bypasses the unit rate card.** When a subscription bills overage through an ACU or ABU stream, that stream's tiers, minimum commitment, ACU floor and per-workflow and per-class ABU prices are not used; overage is billed at the blended or ACU price × (1 + premium). The RFP sample configures ACU tiers at 300,000 and 600,000 ACUs, but they never affect billing: its TCV is INR 69,786,913.03 with or without them.
-13. **No floor on ABU tiers.** Unlike ACU tier billing, ABU tier billing passes no margin floor.
-14. **The fixed implementation fee ignores the stream's margin by default.** It uses the implementation plan's price. For example, the Customer Service sample's fee stream says 30%, but the fee is priced at the plan's 32%.
+10. **Implementation cash in month 0.** The whole implementation cost and fee fall in month 0, with no milestone billing. The schedule's duration in weeks does not move go-live or the projection. Under time and materials the whole T&M value is also billed in month 0.
+11. **All-units tier cliffs.** Under `all_units`, crossing a threshold reprices every unit, so revenue can fall as volume rises. On the AP rate card, 60,000 ABUs bill INR 2,270,420.52 and 60,001 ABUs bill INR 2,202,344.61. The margin floor limits how far a band can fall but does not remove the cliff.
+12. **Prices are set at one pricing basis.** The steady contract-year-1 month is used, and prices do not account for tier discounts. AP's steady margin is therefore 34.95% against a 35% target.
+13. **Subscription overage is billed at one flat rate.** This is by design. When a subscription bills overage through an ACU or ABU stream, the overage rate is the ACU price or blended ABU price × (1 + premium). That stream's volume tiers, minimum commitment, ACU floor and per-workflow and per-class ABU prices are not used, so tiers configured on it have no effect.
+14. **Out-of-range margins are capped, not rejected.** A target margin or margin floor of 100% or more is applied as 99%, which prices at 100× cost. The result is flagged with a `MARGIN_RANGE` error but is still calculated, so it must not be quoted. A contract term below 1 month is treated as 1 and flagged `TERM`.
 15. **Gainshare threshold and cap are monthly** (one twelfth of the annual figures), and gainshare is not escalated.
-16. **A target margin or margin floor of 100% or more makes the calculation throw** in `priceForMargin()`. `validateProject()` reports `MARGIN_RANGE` for target margins, but not for margin floors.
-17. **A missing FX rate also throws** (`FxError`) during calculation. `FX_MISSING` is only visible from a direct `validateProject()` call.
+16. **Break-even is searched on a grid.** Gross profit is checked at 24 fixed volume multipliers between 0.0001× and 128× before bisection. A loss-making band that falls entirely between two profitable grid points is not detected.
 
 **Value and ROI**
 
-18. **Benefits follow attempted volume, not outcomes.** Benefit lines are fixed amounts, optionally scaled by attempted volume, so they do not respond to success, acceptance or human-intervention rates. Under ABU pricing, a lower success rate lowers fees without lowering benefits. In the AP sensitivity, success −3 pp raises client ROI to 37.29% and +3 pp lowers it to 30.98%.
-19. **Scenario volume does not move volume-scaled benefits.** A scenario recalculates its own baseline, so the volume index stays 1 at steady state. In the AP sensitivity, volume −20% therefore raises client ROI to 57.12% (fees fall, benefits stay). Treat client ROI in volume scenarios with care.
-20. **Double ramp for volume-scaled benefits.** A benefit that scales with volume gets both its own ramp and the go-live volume ramp, through the volume index.
-21. **The steady value month counts every benefit line at full ramp**, including lines that start later. AP's "Avoided hiring for volume growth" starts in month 13 but is in the steady validated figure of INR 4,806,250.
-22. **Overlap winners can change from month to month**, because the largest counted line in each group is chosen every month. The capacity-conversion cap compares against productivity value across all workflows.
-23. **Rejected transactions carry both rework and a full manual redo.** Every rejected transaction adds its full manual minutes to the client's after-AI hours as fallback. With client-borne review, its rework minutes are added as well, so a rejection costs the client more time than doing the work manually from the start. With provider-borne review, the provider pays for rework and the client still redoes the work manually.
-24. **Working capital is entered, not modelled**, as an annual financing benefit (section 13.2).
-25. **Payback counting.** Payback counts months from month 0 (the implementation month as time zero), and the crossing month is interpolated linearly.
+17. **Benefits follow attempted volume, not outcomes.** Benefit lines are fixed amounts, optionally scaled by attempted volume, so they do not respond to success, acceptance or human-intervention rates. Under ABU pricing, a lower success rate lowers fees without lowering benefits. In the AP sensitivity, success −3 pp raises client ROI to 37.29% and +3 pp lowers it to 30.98%.
+18. **Double ramp for volume-scaled benefits.** A benefit that scales with volume gets both its own ramp and the go-live volume ramp, through the volume index.
+19. **The steady value month counts every benefit line at full ramp**, including lines that start later. AP's "Avoided hiring for volume growth" starts in month 13 but is in the steady validated figure of INR 4,806,250.
+20. **Overlap winners can change from month to month**, because the largest counted line in each group is chosen every month. The capacity-conversion cap compares against productivity value across all workflows.
+21. **Rejected transactions are redone manually by the client.** In the value model, every rejected or failed transaction adds its full manual minutes to the client's after-AI hours, whoever bears review. With provider-borne review, the provider's rework minutes on rejected transactions are also a provider cost, so the provider's rework and the client's manual redo are both counted, as costs to different parties.
+22. **Working capital is entered, not modelled**, as an annual financing benefit (section 13.2).
+23. **Payback counting.** Payback counts months from month 0 (the implementation month as time zero), and the crossing month is interpolated linearly.
 
 **Other**
 
-26. **Variance analysis** allocates each month's *validated* benefit to workflows by run-cost share and labels it "forecast benefit". Estimated tokens include reasoning tokens; actual tokens are input + output as recorded.
-27. **Reconciliation** proves the breakdowns of the steady-state snapshot and the term totals. It does not re-check every month's breakdowns.
-28. **Stored but not calculated.** Outcome KPIs (before and after) and rate-card version records are stored for reporting and governance. No calculation uses them.
-29. **Template sizing is heuristic.** Implementation effort, hosting nodes, AgentOps FTEs and the placeholder capacity-conversion benefit from `templates.ts` are starting assumptions, and every line is editable.
+24. **Variance analysis** allocates each month's *validated* benefit to workflows by run-cost share and returns it in the field `forecastBenefit`. Estimated tokens include reasoning tokens; actual tokens are input + output as recorded.
+25. **Reconciliation** proves the breakdowns of the steady-state snapshot and the term totals. It does not re-check every month's breakdowns.
+26. **Stored but not calculated.** Outcome KPIs (before and after) and rate-card version records are stored for reporting and governance. No calculation uses them.
+27. **Template sizing is heuristic.** Implementation effort, hosting nodes, AgentOps FTEs and the placeholder capacity-conversion benefit from `templates.ts` are starting assumptions, and every line is editable.
 
 ---
 
@@ -1628,4 +1682,4 @@ console.log(r.baseline.totalRunCost.toFixed(2), r.economics.provider.tcv.toFixed
 
 Expected output: `1513811.40 117904895.33 34.06 22`.
 
-The engine tests (`npm run test -w @aies/engine`) cover tokenomics, ACU/ABU, pricing, value and ROI, scenarios and integrity. All 85 tests passed when this document was written.
+The engine tests (`npm run test -w @aies/engine`) cover tokenomics, ACU/ABU, pricing, value and ROI, scenarios, integrity and regressions for invalid inputs. All 92 tests passed when this document was last updated. The reports package has 43 tests (`npm run test -w @aies/reports`), including a LibreOffice recalculation of the Excel model that is skipped when LibreOffice is not installed, and the API has 27 (`npm run test -w @aies/api`). `npm test` at the repository root runs all three.

@@ -259,6 +259,8 @@ export function buildPriceBook({ project, baseline, impl, marginal, streams: str
         byWorkflow[wf.id] = { workflowId: wf.id, recoveredCost: recovered, failureCostExcluded: failure, weightedAbus: v.weightedAbus, billableUnits, costPerAbu, listPrice: list, price, floorPrice, floorApplied, overridden, classPrices };
         revenueAtBasis = revenueAtBasis.plus(abuRawRevenue(byWorkflow[wf.id], v.byClass));
       }
+      if (baseline.totals.weightedAbus.isZero() && recoveredRun.plus(implPart).gt(0))
+        issues.push({ severity: 'warning', code: 'ZERO_ABU', message: 'No accepted ABUs are measured at the pricing basis, so a per-ABU price cannot recover cost (and ABU minimum commitments bill nothing). Set a monthly volume or a negotiated price.' });
       const blendedPrice = safeDiv(revenueAtBasis, baseline.totals.weightedAbus);
       const blendedFloor = safeDiv(sum(Object.values(byWorkflow).map((w) => w.floorPrice.times(w.billableUnits))), baseline.totals.weightedAbus);
       out.push({ ...base, recoveredCost: recoveredRun.plus(implPart), abu: { byWorkflow, blendedPrice, blendedFloor }, unitPrice: blendedPrice, unitCost: safeDiv(recoveredRun.plus(implPart), baseline.totals.weightedAbus) });

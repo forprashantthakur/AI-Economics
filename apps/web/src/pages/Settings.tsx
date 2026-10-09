@@ -1,6 +1,7 @@
 import { PageHeader, Tabs } from '../components/ui';
 import { navigate } from '../lib/router';
-import { useCan } from '../state/store';
+import { useCan, useStore } from '../state/store';
+import { ServerAuditTable, ServerPanel } from './settings/Server';
 import { AcuWeightsTab } from './settings/AcuWeights';
 import { AuditTab, DataTab, UsersTab } from './settings/Admin';
 import { CloudPricesTab, FxTab } from './settings/CloudFx';
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
 export function Settings({ tab }: { tab?: string }) {
   const active: Tab = TABS.some((t) => t.id === tab) ? (tab as Tab) : 'models';
   const canEdit = useCan('catalog.edit');
+  const { state } = useStore();
   return (
     <div>
       <PageHeader
@@ -37,8 +39,13 @@ export function Settings({ tab }: { tab?: string }) {
       {active === 'acu' && <AcuWeightsTab />}
       {active === 'templates' && <TemplatesTab />}
       {active === 'users' && <UsersTab />}
-      {active === 'audit' && <AuditTab />}
-      {active === 'data' && <DataTab />}
+      {active === 'audit' && (state.server ? <ServerAuditTable /> : <AuditTab />)}
+      {active === 'data' && (
+        <div className="space-y-5">
+          <ServerPanel />
+          <DataTab />
+        </div>
+      )}
     </div>
   );
 }
