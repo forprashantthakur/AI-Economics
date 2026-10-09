@@ -179,14 +179,18 @@ body {
   border-radius: 4px;
 }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  color: inherit;
+/* Base and component rules live in cascade layers so Tailwind utilities (pr-9, text-brand-ink …) override them. */
+@layer base {
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }
 
+@layer components {
 /* Inputs share one quiet style. */
 .field {
   width: 100%;
@@ -218,6 +222,8 @@ select.field {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378827e' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
+}
+
 }
 
 /* Data tables: hairline rows, right-aligned numerals. */

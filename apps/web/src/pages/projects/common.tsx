@@ -1,3 +1,4 @@
+import { saveFile } from '../../lib/download';
 /**
  * Helpers shared by the project, intake and settings pages: option lists,
  * small inputs (tags, month, suggestions), download helpers and period maths.
@@ -95,15 +96,7 @@ export function slugify(s: string): string {
 }
 
 export function downloadFile(filename: string, content: string, type = 'application/json') {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  void saveFile(content, filename, type);
 }
 
 export function exportProject(p: Project) {
